@@ -1,11 +1,11 @@
 /*
- * Copyright 2012-2018 the original author or authors.
+ * Copyright 2012-2020 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -16,113 +16,118 @@
 
 package org.springframework.boot.task;
 
+import java.time.Duration;
 import java.util.Collections;
 import java.util.Set;
 
-import org.junit.Rule;
-import org.junit.Test;
-import org.junit.rules.ExpectedException;
-import org.mockito.Mockito;
+import org.junit.jupiter.api.Test;
 
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 /**
  * Tests for {@link TaskSchedulerBuilder}.
  *
  * @author Stephane Nicoll
  */
-public class TaskSchedulerBuilderTests {
-
-	@Rule
-	public ExpectedException thrown = ExpectedException.none();
+class TaskSchedulerBuilderTests {
 
 	private TaskSchedulerBuilder builder = new TaskSchedulerBuilder();
 
 	@Test
-	public void createWhenCustomizersAreNullShouldThrowException() {
-		this.thrown.expect(IllegalArgumentException.class);
-		this.thrown.expectMessage("TaskSchedulerCustomizers must not be null");
-		new TaskSchedulerBuilder((TaskSchedulerCustomizer[]) null);
-	}
-
-	@Test
-	public void poolSettingsShouldApply() {
+	void poolSettingsShouldApply() {
 		ThreadPoolTaskScheduler scheduler = this.builder.poolSize(4).build();
 		assertThat(scheduler.getPoolSize()).isEqualTo(4);
 	}
 
 	@Test
-	public void threadNamePrefixShouldApply() {
-		ThreadPoolTaskScheduler executor = this.builder.threadNamePrefix("test-").build();
-		assertThat(executor.getThreadNamePrefix()).isEqualTo("test-");
+	void awaitTerminationShouldApply() {
+		ThreadPoolTaskScheduler executor = this.builder.awaitTermination(true).build();
+		assertThat(executor).hasFieldOrPropertyWithValue("waitForTasksToCompleteOnShutdown", true);
 	}
 
 	@Test
-	public void customizersWhenCustomizersAreNullShouldThrowException() {
-		this.thrown.expect(IllegalArgumentException.class);
-		this.thrown.expectMessage("TaskSchedulerCustomizers must not be null");
-		this.builder.customizers((TaskSchedulerCustomizer[]) null);
+	void awaitTerminationPeriodShouldApply() {
+		Duration period = Duration.ofMinutes(1);
+		ThreadPoolTaskScheduler executor = this.builder.awaitTerminationPeriod(period).build();
+		assertThat(executor).hasFieldOrPropertyWithValue("awaitTerminationMillis", period.toMillis());
 	}
 
 	@Test
-	public void customizersCollectionWhenCustomizersAreNullShouldThrowException() {
-		this.thrown.expect(IllegalArgumentException.class);
-		this.thrown.expectMessage("TaskSchedulerCustomizers must not be null");
-		this.builder.customizers((Set<TaskSchedulerCustomizer>) null);
+	void threadNamePrefixShouldApply() {
+		ThreadPoolTaskScheduler scheduler = this.builder.threadNamePrefix("test-").build();
+		assertThat(scheduler.getThreadNamePrefix()).isEqualTo("test-");
 	}
 
 	@Test
-	public void customizersShouldApply() {
-		TaskSchedulerCustomizer customizer = Mockito.mock(TaskSchedulerCustomizer.class);
-		ThreadPoolTaskScheduler executor = this.builder.customizers(customizer).build();
-		Mockito.verify(customizer).customize(executor);
+	void customizersWhenCustomizersAreNullShouldThrowException() {
+		assertThatIllegalArgumentException()
+				.isThrownBy(() -> this.builder.customizers((TaskSchedulerCustomizer[]) null))
+				.withMessageContaining("Customizers must not be null");
 	}
 
 	@Test
-	public void customizersShouldBeAppliedLast() {
-		ThreadPoolTaskScheduler scheduler = Mockito.spy(new ThreadPoolTaskScheduler());
-		this.builder.poolSize(4).threadNamePrefix("test-")
-				.additionalCustomizers((taskScheduler) -> {
-					Mockito.verify(taskScheduler).setPoolSize(4);
-					Mockito.verify(taskScheduler).setThreadNamePrefix("test-");
-				});
+	void customizersCollectionWhenCustomizersAreNullShouldThrowException() {
+		assertThatIllegalArgumentException()
+				.isThrownBy(() -> this.builder.customizers((Set<TaskSchedulerCustomizer>) null))
+				.withMessageContaining("Customizers must not be null");
+	}
+
+	@Test
+	void customizersShouldApply() {
+		TaskSchedulerCustomizer customizer = mock(TaskSchedulerCustomizer.class);
+		ThreadPoolTaskScheduler scheduler = this.builder.customizers(customizer).build();
+		verify(customizer).customize(scheduler);
+	}
+
+	@Test
+	void customizersShouldBeAppliedLast() {
+		ThreadPoolTaskScheduler scheduler = spy(new ThreadPoolTaskScheduler());
+		this.builder.poolSize(4).threadNamePrefix("test-").additionalCustomizers((taskScheduler) -> {
+			verify(taskScheduler).setPoolSize(4);
+			verify(taskScheduler).setThreadNamePrefix("test-");
+		});
 		this.builder.configure(scheduler);
 	}
 
 	@Test
-	public void customizersShouldReplaceExisting() {
-		TaskSchedulerCustomizer customizer1 = Mockito.mock(TaskSchedulerCustomizer.class);
-		TaskSchedulerCustomizer customizer2 = Mockito.mock(TaskSchedulerCustomizer.class);
-		ThreadPoolTaskScheduler executor = this.builder.customizers(customizer1)
-				.customizers(Collections.singleton(customizer2)).build();
-		Mockito.verifyZeroInteractions(customizer1);
-		Mockito.verify(customizer2).customize(executor);
-	}
-
-	@Test
-	public void additionalCustomizersWhenCustomizersAreNullShouldThrowException() {
-		this.thrown.expect(IllegalArgumentException.class);
-		this.thrown.expectMessage("TaskSchedulerCustomizers must not be null");
-		this.builder.additionalCustomizers((TaskSchedulerCustomizer[]) null);
-	}
-
-	@Test
-	public void additionalCustomizersCollectionWhenCustomizersAreNullShouldThrowException() {
-		this.thrown.expect(IllegalArgumentException.class);
-		this.thrown.expectMessage("TaskSchedulerCustomizers must not be null");
-		this.builder.additionalCustomizers((Set<TaskSchedulerCustomizer>) null);
-	}
-
-	@Test
-	public void additionalCustomizersShouldAddToExisting() {
-		TaskSchedulerCustomizer customizer1 = Mockito.mock(TaskSchedulerCustomizer.class);
-		TaskSchedulerCustomizer customizer2 = Mockito.mock(TaskSchedulerCustomizer.class);
+	void customizersShouldReplaceExisting() {
+		TaskSchedulerCustomizer customizer1 = mock(TaskSchedulerCustomizer.class);
+		TaskSchedulerCustomizer customizer2 = mock(TaskSchedulerCustomizer.class);
 		ThreadPoolTaskScheduler scheduler = this.builder.customizers(customizer1)
-				.additionalCustomizers(customizer2).build();
-		Mockito.verify(customizer1).customize(scheduler);
-		Mockito.verify(customizer2).customize(scheduler);
+				.customizers(Collections.singleton(customizer2)).build();
+		verifyNoInteractions(customizer1);
+		verify(customizer2).customize(scheduler);
+	}
+
+	@Test
+	void additionalCustomizersWhenCustomizersAreNullShouldThrowException() {
+		assertThatIllegalArgumentException()
+				.isThrownBy(() -> this.builder.additionalCustomizers((TaskSchedulerCustomizer[]) null))
+				.withMessageContaining("Customizers must not be null");
+	}
+
+	@Test
+	void additionalCustomizersCollectionWhenCustomizersAreNullShouldThrowException() {
+		assertThatIllegalArgumentException()
+				.isThrownBy(() -> this.builder.additionalCustomizers((Set<TaskSchedulerCustomizer>) null))
+				.withMessageContaining("Customizers must not be null");
+	}
+
+	@Test
+	void additionalCustomizersShouldAddToExisting() {
+		TaskSchedulerCustomizer customizer1 = mock(TaskSchedulerCustomizer.class);
+		TaskSchedulerCustomizer customizer2 = mock(TaskSchedulerCustomizer.class);
+		ThreadPoolTaskScheduler scheduler = this.builder.customizers(customizer1).additionalCustomizers(customizer2)
+				.build();
+		verify(customizer1).customize(scheduler);
+		verify(customizer2).customize(scheduler);
 	}
 
 }

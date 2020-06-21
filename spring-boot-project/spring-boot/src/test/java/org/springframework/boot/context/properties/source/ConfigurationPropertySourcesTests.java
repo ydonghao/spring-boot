@@ -1,11 +1,11 @@
 /*
- * Copyright 2012-2018 the original author or authors.
+ * Copyright 2012-2020 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -19,9 +19,13 @@ package org.springframework.boot.context.properties.source;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.Test;
 
+import org.springframework.boot.origin.Origin;
+import org.springframework.boot.origin.OriginLookup;
 import org.springframework.core.env.ConfigurableEnvironment;
 import org.springframework.core.env.Environment;
 import org.springframework.core.env.MapPropertySource;
@@ -39,16 +43,14 @@ import static org.assertj.core.api.Assertions.assertThat;
  *
  * @author Phillip Webb
  */
-public class ConfigurationPropertySourcesTests {
+class ConfigurationPropertySourcesTests {
 
 	@Test
-	public void attachShouldAddAdapterAtBeginning() {
+	void attachShouldAddAdapterAtBeginning() {
 		ConfigurableEnvironment environment = new StandardEnvironment();
 		MutablePropertySources sources = environment.getPropertySources();
-		sources.addLast(new SystemEnvironmentPropertySource("system",
-				Collections.singletonMap("SERVER_PORT", "1234")));
-		sources.addLast(new MapPropertySource("config",
-				Collections.singletonMap("server.port", "4568")));
+		sources.addLast(new SystemEnvironmentPropertySource("system", Collections.singletonMap("SERVER_PORT", "1234")));
+		sources.addLast(new MapPropertySource("config", Collections.singletonMap("server.port", "4568")));
 		int size = sources.size();
 		ConfigurationPropertySources.attach(environment);
 		assertThat(sources.size()).isEqualTo(size + 1);
@@ -57,36 +59,35 @@ public class ConfigurationPropertySourcesTests {
 	}
 
 	@Test
-	public void attachShouldReAttachInMergedSetup() {
+	void attachShouldReAttachInMergedSetup() {
 		ConfigurableEnvironment parent = new StandardEnvironment();
 		ConfigurationPropertySources.attach(parent);
 		ConfigurableEnvironment child = new StandardEnvironment();
 		child.merge(parent);
-		child.getPropertySources().addLast(new MapPropertySource("config",
-				Collections.singletonMap("my.example_property", "1234")));
+		child.getPropertySources()
+				.addLast(new MapPropertySource("config", Collections.singletonMap("my.example_property", "1234")));
 		ConfigurationPropertySources.attach(child);
 		assertThat(child.getProperty("my.example-property")).isEqualTo("1234");
 	}
 
 	@Test
-	public void getWhenNotAttachedShouldReturnAdapted() {
+	void getWhenNotAttachedShouldReturnAdapted() {
 		ConfigurableEnvironment environment = new StandardEnvironment();
 		assertThat(ConfigurationPropertySources.get(environment)).isNotEmpty();
 	}
 
 	@Test
-	public void getWhenAttachedShouldReturnAttached() {
+	void getWhenAttachedShouldReturnAttached() {
 		ConfigurableEnvironment environment = new StandardEnvironment();
 		MutablePropertySources sources = environment.getPropertySources();
-		sources.addFirst(
-				new MapPropertySource("test", Collections.singletonMap("a", "b")));
+		sources.addFirst(new MapPropertySource("test", Collections.singletonMap("a", "b")));
 		int expectedSize = sources.size();
 		ConfigurationPropertySources.attach(environment);
 		assertThat(ConfigurationPropertySources.get(environment)).hasSize(expectedSize);
 	}
 
 	@Test
-	public void environmentPropertyExpansionShouldWorkWhenAttached() {
+	void environmentPropertyExpansionShouldWorkWhenAttached() {
 		ConfigurableEnvironment environment = new StandardEnvironment();
 		Map<String, Object> source = new LinkedHashMap<>();
 		source.put("fooBar", "Spring ${barBaz} ${bar-baz}");
@@ -98,22 +99,18 @@ public class ConfigurationPropertySourcesTests {
 	}
 
 	@Test
-	public void fromPropertySourceShouldReturnSpringConfigurationPropertySource() {
-		PropertySource<?> source = new MapPropertySource("foo",
-				Collections.singletonMap("foo", "bar"));
-		ConfigurationPropertySource configurationPropertySource = ConfigurationPropertySources
-				.from(source).iterator().next();
-		assertThat(configurationPropertySource)
-				.isInstanceOf(SpringConfigurationPropertySource.class);
+	void fromPropertySourceShouldReturnSpringConfigurationPropertySource() {
+		PropertySource<?> source = new MapPropertySource("foo", Collections.singletonMap("foo", "bar"));
+		ConfigurationPropertySource configurationPropertySource = ConfigurationPropertySources.from(source).iterator()
+				.next();
+		assertThat(configurationPropertySource).isInstanceOf(SpringConfigurationPropertySource.class);
 	}
 
 	@Test
-	public void fromPropertySourceShouldFlattenPropertySources() {
+	void fromPropertySourceShouldFlattenPropertySources() {
 		StandardEnvironment environment = new StandardEnvironment();
-		environment.getPropertySources().addFirst(
-				new MapPropertySource("foo", Collections.singletonMap("foo", "bar")));
-		environment.getPropertySources().addFirst(
-				new MapPropertySource("far", Collections.singletonMap("far", "far")));
+		environment.getPropertySources().addFirst(new MapPropertySource("foo", Collections.singletonMap("foo", "bar")));
+		environment.getPropertySources().addFirst(new MapPropertySource("far", Collections.singletonMap("far", "far")));
 		MutablePropertySources sources = new MutablePropertySources();
 		sources.addFirst(new PropertySource<Environment>("env", environment) {
 
@@ -123,11 +120,98 @@ public class ConfigurationPropertySourcesTests {
 			}
 
 		});
-		sources.addLast(
-				new MapPropertySource("baz", Collections.singletonMap("baz", "barf")));
-		Iterable<ConfigurationPropertySource> configurationSources = ConfigurationPropertySources
-				.from(sources);
-		assertThat(configurationSources.iterator()).hasSize(5);
+		sources.addLast(new MapPropertySource("baz", Collections.singletonMap("baz", "barf")));
+		Iterable<ConfigurationPropertySource> configurationSources = ConfigurationPropertySources.from(sources);
+		assertThat(configurationSources.iterator()).toIterable().hasSize(5);
+	}
+
+	@Test // gh-20625
+	void environmentPropertyAccessWhenImmutableShouldBePerformant() {
+		testPropertySourcePerformance(true, 1000);
+	}
+
+	@Test // gh-20625
+	void environmentPropertyAccessWhenMutableWithCacheShouldBePerformant() {
+		StandardEnvironment environment = createPerformanceTestEnvironment(false);
+		ConfigurationPropertyCaching.get(environment).enable();
+		testPropertySourcePerformance(environment, 1000);
+	}
+
+	@Test // gh-20625
+	@Disabled("for manual testing")
+	void environmentPropertyAccessWhenMutableShouldBeTolerable() {
+		testPropertySourcePerformance(false, 5000);
+	}
+
+	@Test // gh-21416
+	void descendantOfPropertyAccessWhenMutableWithCacheShouldBePerformant() {
+		StandardEnvironment environment = createPerformanceTestEnvironment(true);
+		Iterable<ConfigurationPropertySource> sources = ConfigurationPropertySources.get(environment);
+		ConfigurationPropertyName missing = ConfigurationPropertyName.of("missing");
+		long start = System.nanoTime();
+		for (int i = 0; i < 1000; i++) {
+			for (ConfigurationPropertySource source : sources) {
+				assertThat(source.containsDescendantOf(missing)).isEqualTo(ConfigurationPropertyState.ABSENT);
+			}
+		}
+		long total = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start);
+		assertThat(total).isLessThan(1000);
+	}
+
+	private void testPropertySourcePerformance(boolean immutable, int maxTime) {
+		StandardEnvironment environment = createPerformanceTestEnvironment(immutable);
+		testPropertySourcePerformance(environment, maxTime);
+	}
+
+	private StandardEnvironment createPerformanceTestEnvironment(boolean immutable) {
+		StandardEnvironment environment = new StandardEnvironment();
+		MutablePropertySources propertySources = environment.getPropertySources();
+		for (int i = 0; i < 100; i++) {
+			propertySources.addLast(new TestPropertySource(i, immutable));
+		}
+		ConfigurationPropertySources.attach(environment);
+		return environment;
+	}
+
+	private void testPropertySourcePerformance(StandardEnvironment environment, int maxTime) {
+		long start = System.nanoTime();
+		for (int i = 0; i < 1000; i++) {
+			environment.getProperty("missing" + i);
+		}
+		long total = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start);
+		assertThat(environment.getProperty("test-10-property-80")).isEqualTo("test-10-property-80-value");
+		assertThat(total).isLessThan(maxTime);
+	}
+
+	static class TestPropertySource extends MapPropertySource implements OriginLookup<String> {
+
+		private final boolean immutable;
+
+		TestPropertySource(int index, boolean immutable) {
+			super("test-" + index, createProperties(index));
+			this.immutable = immutable;
+		}
+
+		private static Map<String, Object> createProperties(int index) {
+			Map<String, Object> map = new LinkedHashMap<String, Object>();
+			for (int i = 0; i < 1000; i++) {
+				String name = "test-" + index + "-property-" + i;
+				String value = name + "-value";
+				map.put(name, value);
+			}
+			return map;
+		}
+
+		@Override
+		public Origin getOrigin(String key) {
+			return null;
+		}
+
+		@Override
+		public boolean isImmutable() {
+			return this.immutable;
+		}
+
 	}
 
 }

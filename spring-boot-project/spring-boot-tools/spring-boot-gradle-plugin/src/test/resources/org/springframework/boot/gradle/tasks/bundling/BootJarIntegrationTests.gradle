@@ -1,17 +1,18 @@
-buildscript {
-	dependencies {
-		classpath files(pluginClasspath.split(','))
-	}
+plugins {
+	id 'java'
+	id 'org.springframework.boot' version '{version}'
 }
-
-apply plugin: 'java'
-apply plugin: 'org.springframework.boot'
 
 bootJar {
 	mainClassName = 'com.example.Application'
 	if (project.hasProperty('includeLaunchScript') ? includeLaunchScript : false) {
 		launchScript {
 			properties 'prop' : project.hasProperty('launchScriptProperty') ? launchScriptProperty : 'default'
+		}
+	}
+	if (project.hasProperty('layered') && project.getProperty('layered')) {
+		layered {
+			includeLayerTools = project.hasProperty('excludeTools') && project.getProperty('excludeTools') ? false : true
 		}
 	}
 }

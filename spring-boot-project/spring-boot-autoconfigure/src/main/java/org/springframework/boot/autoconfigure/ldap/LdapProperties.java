@@ -1,11 +1,11 @@
 /*
- * Copyright 2012-2018 the original author or authors.
+ * Copyright 2012-2020 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -56,9 +56,10 @@ public class LdapProperties {
 	private String password;
 
 	/**
-	 * Whether read-only operations should use an anonymous environment.
+	 * Whether read-only operations should use an anonymous environment. Disabled by
+	 * default unless a username is set.
 	 */
-	private boolean anonymousReadOnly;
+	private Boolean anonymousReadOnly;
 
 	/**
 	 * LDAP specification settings.
@@ -97,11 +98,11 @@ public class LdapProperties {
 		this.password = password;
 	}
 
-	public boolean getAnonymousReadOnly() {
+	public Boolean getAnonymousReadOnly() {
 		return this.anonymousReadOnly;
 	}
 
-	public void setAnonymousReadOnly(boolean anonymousReadOnly) {
+	public void setAnonymousReadOnly(Boolean anonymousReadOnly) {
 		this.anonymousReadOnly = anonymousReadOnly;
 	}
 
@@ -120,7 +121,7 @@ public class LdapProperties {
 		Assert.notNull(environment, "Environment must not be null");
 		String localPort = environment.getProperty("local.ldap.port");
 		if (localPort != null) {
-			return Integer.valueOf(localPort);
+			return Integer.parseInt(localPort);
 		}
 		return DEFAULT_PORT;
 	}
