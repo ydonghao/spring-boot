@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2020 the original author or authors.
+ * Copyright 2012-2022 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -71,7 +71,14 @@ class PeriodToStringConverterTests {
 		assertThat(converted).isEqualTo("1y3d");
 	}
 
-	static Stream<? extends Arguments> conversionServices() throws Exception {
+	@ConversionServiceTest
+	void convertWithWeekUnitShouldConvertToStringInDays(ConversionService conversionService) {
+		String converted = (String) conversionService.convert(Period.ofWeeks(53),
+				MockPeriodTypeDescriptor.get(null, PeriodStyle.SIMPLE), TypeDescriptor.valueOf(String.class));
+		assertThat(converted).isEqualTo("371d");
+	}
+
+	static Stream<? extends Arguments> conversionServices() {
 		return ConversionServiceArguments.with(new PeriodToStringConverter());
 	}
 

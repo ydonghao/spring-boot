@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2020 the original author or authors.
+ * Copyright 2012-2023 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -58,7 +58,7 @@ final class GracefulShutdown {
 	private void doShutdown(GracefulShutdownCallback callback, DisposableServer server) {
 		this.shuttingDown = true;
 		try {
-			server.disposeNow(Duration.ofMillis(Long.MAX_VALUE));
+			server.disposeNow(Duration.ofNanos(Long.MAX_VALUE));
 			logger.info("Graceful shutdown complete");
 			callback.shutdownComplete(GracefulShutdownResult.IDLE);
 		}
@@ -78,7 +78,7 @@ final class GracefulShutdown {
 			while (!this.shuttingDown) {
 				sleep(50);
 			}
-			this.shutdownThread.interrupt();
+			shutdownThread.interrupt();
 		}
 	}
 

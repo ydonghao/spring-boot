@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2020 the original author or authors.
+ * Copyright 2012-2022 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,11 +16,9 @@
 
 package org.springframework.boot.actuate.autoconfigure.availability;
 
-import org.springframework.boot.actuate.autoconfigure.availability.AvailabilityProbesAutoConfiguration.ProbesCondition;
-import org.springframework.boot.actuate.autoconfigure.health.ConditionalOnEnabledHealthIndicator;
 import org.springframework.boot.actuate.availability.LivenessStateHealthIndicator;
 import org.springframework.boot.actuate.availability.ReadinessStateHealthIndicator;
-import org.springframework.boot.autoconfigure.AutoConfigureAfter;
+import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.autoconfigure.availability.ApplicationAvailabilityAutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionMessage;
@@ -32,7 +30,6 @@ import org.springframework.boot.cloud.CloudPlatform;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.ConditionContext;
 import org.springframework.context.annotation.Conditional;
-import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
 import org.springframework.core.type.AnnotatedTypeMetadata;
 
@@ -43,52 +40,68 @@ import org.springframework.core.type.AnnotatedTypeMetadata;
  * @author Phillip Webb
  * @since 2.3.0
  */
-@Configuration(proxyBeanMethods = false)
-@Conditional(ProbesCondition.class)
-@AutoConfigureAfter(ApplicationAvailabilityAutoConfiguration.class)
+@AutoConfiguration(after = { AvailabilityHealthContributorAutoConfiguration.class,
+		ApplicationAvailabilityAutoConfiguration.class })
+@Conditional(AvailabilityProbesAutoConfiguration.ProbesCondition.class)
 public class AvailabilityProbesAutoConfiguration {
 
 	@Bean
-	@ConditionalOnEnabledHealthIndicator("livenessState")
-	@ConditionalOnMissingBean
+	@ConditionalOnMissingBean(name = "livenessStateHealthIndicator")
 	public LivenessStateHealthIndicator livenessStateHealthIndicator(ApplicationAvailability applicationAvailability) {
 		return new LivenessStateHealthIndicator(applicationAvailability);
 	}
 
 	@Bean
-	@ConditionalOnEnabledHealthIndicator("readinessState")
-	@ConditionalOnMissingBean
+	@ConditionalOnMissingBean(name = "readinessStateHealthIndicator")
 	public ReadinessStateHealthIndicator readinessStateHealthIndicator(
 			ApplicationAvailability applicationAvailability) {
 		return new ReadinessStateHealthIndicator(applicationAvailability);
 	}
 
 	@Bean
-	public AvailabilityProbesHealthEndpointGroupsPostProcessor availabilityProbesHealthEndpointGroupsPostProcessor() {
-		return new AvailabilityProbesHealthEndpointGroupsPostProcessor();
+	public AvailabilityProbesHealthEndpointGroupsPostProcessor availabilityProbesHealthEndpointGroupsPostProcessor(
+			Environment environment) {
+		return new AvailabilityProbesHealthEndpointGroupsPostProcessor(environment);
 	}
 
 	/**
 	 * {@link SpringBootCondition} to enable or disable probes.
+	 * <p>
+	 * Probes are enabled if the dedicated configuration property is enabled or if the
+	 * Kubernetes cloud environment is detected/enforced.
 	 */
 	static class ProbesCondition extends SpringBootCondition {
 
-		private static final String ENABLED_PROPERTY = "management.health.probes.enabled";
+		private static final String ENABLED_PROPERTY = "management.endpoint.health.probes.enabled";
+
+		private static final String DEPRECATED_ENABLED_PROPERTY = "management.health.probes.enabled";
 
 		@Override
 		public ConditionOutcome getMatchOutcome(ConditionContext context, AnnotatedTypeMetadata metadata) {
 			Environment environment = context.getEnvironment();
-			ConditionMessage.Builder message = ConditionMessage.forCondition("Health availability");
-			String enabled = environment.getProperty(ENABLED_PROPERTY);
-			if (enabled != null) {
-				boolean match = !"false".equalsIgnoreCase(enabled);
-				return new ConditionOutcome(match,
-						message.because("'" + ENABLED_PROPERTY + "' set to '" + enabled + "'"));
+			ConditionMessage.Builder message = ConditionMessage.forCondition("Probes availability");
+			ConditionOutcome outcome = onProperty(environment, message, ENABLED_PROPERTY);
+			if (outcome != null) {
+				return outcome;
+			}
+			outcome = onProperty(environment, message, DEPRECATED_ENABLED_PROPERTY);
+			if (outcome != null) {
+				return outcome;
 			}
 			if (CloudPlatform.getActive(environment) == CloudPlatform.KUBERNETES) {
 				return ConditionOutcome.match(message.because("running on Kubernetes"));
 			}
 			return ConditionOutcome.noMatch(message.because("not running on a supported cloud platform"));
+		}
+
+		private ConditionOutcome onProperty(Environment environment, ConditionMessage.Builder message,
+				String propertyName) {
+			String enabled = environment.getProperty(propertyName);
+			if (enabled != null) {
+				boolean match = !"false".equalsIgnoreCase(enabled);
+				return new ConditionOutcome(match, message.because("'" + propertyName + "' set to '" + enabled + "'"));
+			}
+			return null;
 		}
 
 	}

@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2020 the original author or authors.
+ * Copyright 2002-2022 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -29,6 +29,7 @@ import org.springframework.util.Assert;
  *
  * @author Eddú Meléndez
  * @author Edson Chávez
+ * @author Valentine Wu
  * @since 2.3.0
  * @see Period
  */
@@ -48,7 +49,7 @@ public enum PeriodStyle {
 				}
 				Matcher matcher = matcher(value);
 				Assert.state(matcher.matches(), "Does not match simple period pattern");
-				Assert.isTrue(hasAtLeastOneGroupValue(matcher), "'" + value + "' is not a valid simple period");
+				Assert.isTrue(hasAtLeastOneGroupValue(matcher), () -> "'" + value + "' is not a valid simple period");
 				int years = parseInt(matcher, 1);
 				int months = parseInt(matcher, 2);
 				int weeks = parseInt(matcher, 3);
@@ -102,7 +103,7 @@ public enum PeriodStyle {
 	/**
 	 * ISO-8601 formatting.
 	 */
-	ISO8601("^[+-]?P.*$", 0) {
+	ISO8601("^[+-]?P.*$", Pattern.CASE_INSENSITIVE) {
 
 		@Override
 		public Period parse(String value, ChronoUnit unit) {
@@ -212,12 +213,17 @@ public enum PeriodStyle {
 		throw new IllegalArgumentException("'" + value + "' is not a valid period");
 	}
 
-	enum Unit {
+	private enum Unit {
 
 		/**
 		 * Days, represented by suffix {@code d}.
 		 */
 		DAYS(ChronoUnit.DAYS, "d", Period::getDays, Period::ofDays),
+
+		/**
+		 * Weeks, represented by suffix {@code w}.
+		 */
+		WEEKS(ChronoUnit.WEEKS, "w", null, Period::ofWeeks),
 
 		/**
 		 * Months, represented by suffix {@code m}.
@@ -253,15 +259,16 @@ public enum PeriodStyle {
 			return intValue(value) + this.suffix;
 		}
 
-		public boolean isZero(Period value) {
+		private boolean isZero(Period value) {
 			return intValue(value) == 0;
 		}
 
-		public int intValue(Period value) {
+		private int intValue(Period value) {
+			Assert.notNull(this.intValue, () -> "intValue cannot be extracted from " + name());
 			return this.intValue.apply(value);
 		}
 
-		public static Unit fromChronoUnit(ChronoUnit chronoUnit) {
+		private static Unit fromChronoUnit(ChronoUnit chronoUnit) {
 			if (chronoUnit == null) {
 				return Unit.DAYS;
 			}

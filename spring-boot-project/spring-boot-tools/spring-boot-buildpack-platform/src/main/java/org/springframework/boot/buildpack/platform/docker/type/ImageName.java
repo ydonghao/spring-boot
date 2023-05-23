@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2020 the original author or authors.
+ * Copyright 2012-2021 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,7 +25,6 @@ import org.springframework.util.Assert;
  * @author Scott Frederick
  * @since 2.3.0
  * @see ImageReference
- * @see ImageReferenceParser
  * @see #of(String)
  */
 public class ImageName {
@@ -42,10 +41,10 @@ public class ImageName {
 
 	private final String string;
 
-	ImageName(String domain, String name) {
-		Assert.hasText(name, "Name must not be empty");
+	ImageName(String domain, String path) {
+		Assert.hasText(path, "Path must not be empty");
 		this.domain = getDomainOrDefault(domain);
-		this.name = getNameWithDefaultPath(this.domain, name);
+		this.name = getNameWithDefaultPath(this.domain, path);
 		this.string = this.domain + "/" + this.name;
 	}
 
@@ -128,8 +127,22 @@ public class ImageName {
 	 */
 	public static ImageName of(String value) {
 		Assert.hasText(value, "Value must not be empty");
-		ImageReferenceParser parser = ImageReferenceParser.of(value);
-		return new ImageName(parser.getDomain(), parser.getName());
+		String domain = parseDomain(value);
+		String path = (domain != null) ? value.substring(domain.length() + 1) : value;
+		Assert.isTrue(Regex.PATH.matcher(path).matches(),
+				() -> "Unable to parse name \"" + value + "\". "
+						+ "Image name must be in the form '[domainHost:port/][path/]name', "
+						+ "with 'path' and 'name' containing only [a-z0-9][.][_][-]");
+		return new ImageName(domain, path);
+	}
+
+	static String parseDomain(String value) {
+		int firstSlash = value.indexOf('/');
+		String candidate = (firstSlash != -1) ? value.substring(0, firstSlash) : null;
+		if (candidate != null && Regex.DOMAIN.matcher(candidate).matches()) {
+			return candidate;
+		}
+		return null;
 	}
 
 }

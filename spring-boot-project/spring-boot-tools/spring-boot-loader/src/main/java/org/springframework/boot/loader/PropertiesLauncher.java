@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2020 the original author or authors.
+ * Copyright 2012-2023 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -44,10 +44,9 @@ import org.springframework.boot.loader.archive.Archive.EntryFilter;
 import org.springframework.boot.loader.archive.ExplodedArchive;
 import org.springframework.boot.loader.archive.JarFileArchive;
 import org.springframework.boot.loader.util.SystemPropertyUtils;
-import org.springframework.util.Assert;
 
 /**
- * {@link Launcher} for archives with user-configured classpath and main class via a
+ * {@link Launcher} for archives with user-configured classpath and main class through a
  * properties file. This model is often more flexible and more amenable to creating
  * well-behaved OS-level services than a model based on executable jars.
  * <p>
@@ -128,7 +127,7 @@ public class PropertiesLauncher extends Launcher {
 	public static final String CONFIG_LOCATION = "loader.config.location";
 
 	/**
-	 * Properties key for boolean flag (default false) which if set will cause the
+	 * Properties key for boolean flag (default false) which, if set, will cause the
 	 * external configuration properties to be copied to System properties (assuming that
 	 * is allowed by Java security).
 	 */
@@ -270,8 +269,8 @@ public class PropertiesLauncher extends Launcher {
 			}
 			catch (IOException ex) {
 				// Close the HTTP connection (if applicable).
-				if (con instanceof HttpURLConnection) {
-					((HttpURLConnection) con).disconnect();
+				if (con instanceof HttpURLConnection httpURLConnection) {
+					httpURLConnection.disconnect();
 				}
 				throw ex;
 			}
@@ -284,8 +283,7 @@ public class PropertiesLauncher extends Launcher {
 		URLConnection connection = url.openConnection();
 		try {
 			connection.setUseCaches(connection.getClass().getSimpleName().startsWith("JNLP"));
-			if (connection instanceof HttpURLConnection) {
-				HttpURLConnection httpConnection = (HttpURLConnection) connection;
+			if (connection instanceof HttpURLConnection httpConnection) {
 				httpConnection.setRequestMethod("HEAD");
 				int responseCode = httpConnection.getResponseCode();
 				if (responseCode == HttpURLConnection.HTTP_OK) {
@@ -298,8 +296,8 @@ public class PropertiesLauncher extends Launcher {
 			return (connection.getContentLength() >= 0);
 		}
 		finally {
-			if (connection instanceof HttpURLConnection) {
-				((HttpURLConnection) connection).disconnect();
+			if (connection instanceof HttpURLConnection httpURLConnection) {
+				httpURLConnection.disconnect();
 			}
 		}
 	}
@@ -317,7 +315,7 @@ public class PropertiesLauncher extends Launcher {
 		for (String path : commaSeparatedPaths.split(",")) {
 			path = cleanupPath(path);
 			// "" means the user wants root of archive but not current directory
-			path = "".equals(path) ? "/" : path;
+			path = (path == null || path.isEmpty()) ? "/" : path;
 			paths.add(path);
 		}
 		if (paths.isEmpty()) {
@@ -374,7 +372,9 @@ public class PropertiesLauncher extends Launcher {
 		if (classLoader == null) {
 			classLoader = newClassLoader(type, NO_PARAMS);
 		}
-		Assert.notNull(classLoader, () -> "Unable to create class loader for " + className);
+		if (classLoader == null) {
+			throw new IllegalArgumentException("Unable to create class loader for " + className);
+		}
 		return classLoader;
 	}
 
@@ -630,7 +630,7 @@ public class PropertiesLauncher extends Launcher {
 			}
 			EntryFilter filter = new PrefixMatchingArchiveFilter(root);
 			List<Archive> archives = asList(parent.getNestedArchives(null, filter));
-			if (("".equals(root) || ".".equals(root)) && !path.endsWith(".jar")
+			if ((root == null || root.isEmpty() || ".".equals(root)) && !path.endsWith(".jar")
 					&& parent != PropertiesLauncher.this.parent) {
 				// You can't find the root with an entry filter so it has to be added
 				// explicitly. But don't add the root of the parent archive.

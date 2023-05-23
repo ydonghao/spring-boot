@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2020 the original author or authors.
+ * Copyright 2012-2021 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -42,7 +42,7 @@ public class JarModeLibrary extends Library {
 	}
 
 	public JarModeLibrary(LibraryCoordinates coordinates) {
-		super(getJarName(coordinates), null, LibraryScope.RUNTIME, coordinates, false);
+		super(getJarName(coordinates), null, LibraryScope.RUNTIME, coordinates, false, false, true);
 	}
 
 	private static LibraryCoordinates createCoordinates(String artifactId) {
@@ -65,7 +65,7 @@ public class JarModeLibrary extends Library {
 	public InputStream openStream() throws IOException {
 		String path = "META-INF/jarmode/" + getCoordinates().getArtifactId() + ".jar";
 		URL resource = getClass().getClassLoader().getResource(path);
-		Assert.state(resource != null, "Unable to find resource " + path);
+		Assert.state(resource != null, () -> "Unable to find resource " + path);
 		return resource.openStream();
 	}
 

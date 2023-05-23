@@ -109,7 +109,7 @@ public class FieldValues {
 
 	private Integer[] integerArray = new Integer[] { 42, 24 };
 
-	private FieldValues[] unknownArray = new FieldValues[] { new FieldValues() };
+	private UnknownElementType[] unknownArray = new UnknownElementType[] { new UnknownElementType() };
 
 	private Duration durationNone;
 
@@ -124,6 +124,8 @@ public class FieldValues {
 	private Duration durationHours = Duration.ofHours(40);
 
 	private Duration durationDays = Duration.ofDays(50);
+
+	private Duration durationZero = Duration.ZERO;
 
 	private DataSize dataSizeNone;
 
@@ -146,5 +148,7 @@ public class FieldValues {
 	private Period periodMonths = Period.ofMonths(10);
 
 	private Period periodYears = Period.ofYears(15);
+
+	private Period periodZero = Period.ZERO;
 
 }
