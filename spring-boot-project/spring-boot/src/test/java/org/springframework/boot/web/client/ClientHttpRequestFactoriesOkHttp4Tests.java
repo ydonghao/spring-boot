@@ -26,7 +26,6 @@ import org.springframework.http.client.OkHttp3ClientHttpRequestFactory;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
 
 /**
  * Tests for {@link ClientHttpRequestFactories} when OkHttp 4 is the predominant HTTP
@@ -34,7 +33,9 @@ import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
  *
  * @author Andy Wilkinson
  */
-@ClassPathExclusions("httpclient5-*.jar")
+@ClassPathExclusions({ "httpclient5-*.jar", "jetty-client-*.jar" })
+@Deprecated(since = "3.2.0")
+@SuppressWarnings("removal")
 class ClientHttpRequestFactoriesOkHttp4Tests
 		extends AbstractClientHttpRequestFactoriesTests<OkHttp3ClientHttpRequestFactory> {
 
@@ -48,12 +49,6 @@ class ClientHttpRequestFactoriesOkHttp4Tests
 			.startsWith("okhttp-4.");
 	}
 
-	@Test
-	void getFailsWhenBufferRequestBodyIsEnabled() {
-		assertThatIllegalStateException().isThrownBy(() -> ClientHttpRequestFactories
-			.get(ClientHttpRequestFactorySettings.DEFAULTS.withBufferRequestBody(true)));
-	}
-
 	@Override
 	protected long connectTimeout(OkHttp3ClientHttpRequestFactory requestFactory) {
 		return ((OkHttpClient) ReflectionTestUtils.getField(requestFactory, "client")).connectTimeoutMillis();
@@ -62,6 +57,16 @@ class ClientHttpRequestFactoriesOkHttp4Tests
 	@Override
 	protected long readTimeout(OkHttp3ClientHttpRequestFactory requestFactory) {
 		return ((OkHttpClient) ReflectionTestUtils.getField(requestFactory, "client")).readTimeoutMillis();
+	}
+
+	@Override
+	protected boolean supportsSettingConnectTimeout() {
+		return true;
+	}
+
+	@Override
+	protected boolean supportsSettingReadTimeout() {
+		return true;
 	}
 
 }

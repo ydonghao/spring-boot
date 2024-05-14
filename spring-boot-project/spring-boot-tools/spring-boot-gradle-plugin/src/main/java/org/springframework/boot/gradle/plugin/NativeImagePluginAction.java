@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2023 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,14 +22,12 @@ import java.util.stream.Collectors;
 
 import org.graalvm.buildtools.gradle.NativeImagePlugin;
 import org.graalvm.buildtools.gradle.dsl.GraalVMExtension;
-import org.graalvm.buildtools.gradle.dsl.GraalVMReachabilityMetadataRepositoryExtension;
 import org.gradle.api.Action;
 import org.gradle.api.Plugin;
 import org.gradle.api.Project;
 import org.gradle.api.artifacts.Configuration;
 import org.gradle.api.file.FileCollection;
 import org.gradle.api.java.archives.Manifest;
-import org.gradle.api.plugins.ExtensionAware;
 import org.gradle.api.plugins.JavaPlugin;
 import org.gradle.api.plugins.JavaPluginExtension;
 import org.gradle.api.tasks.SourceSetContainer;
@@ -47,8 +45,7 @@ import org.springframework.boot.gradle.tasks.bundling.BootJar;
 class NativeImagePluginAction implements PluginApplicationAction {
 
 	@Override
-	public Class<? extends Plugin<? extends Project>> getPluginClass()
-			throws ClassNotFoundException, NoClassDefFoundError {
+	public Class<? extends Plugin<? extends Project>> getPluginClass() {
 		return NativeImagePlugin.class;
 	}
 
@@ -61,7 +58,6 @@ class NativeImagePluginAction implements PluginApplicationAction {
 			GraalVMExtension graalVmExtension = configureGraalVmExtension(project);
 			configureMainNativeBinaryClasspath(project, sourceSets, graalVmExtension);
 			configureTestNativeBinaryClasspath(sourceSets, graalVmExtension);
-			configureGraalVmReachabilityExtension(graalVmExtension);
 			copyReachabilityMetadataToBootJar(project);
 			configureBootBuildImageToProduceANativeImage(project);
 			configureJarManifestNativeAttribute(project);
@@ -84,7 +80,8 @@ class NativeImagePluginAction implements PluginApplicationAction {
 	}
 
 	private boolean isNotDevelopmentOnly(Configuration configuration) {
-		return !SpringBootPlugin.DEVELOPMENT_ONLY_CONFIGURATION_NAME.equals(configuration.getName());
+		return !SpringBootPlugin.DEVELOPMENT_ONLY_CONFIGURATION_NAME.equals(configuration.getName())
+				&& !SpringBootPlugin.TEST_AND_DEVELOPMENT_ONLY_CONFIGURATION_NAME.equals(configuration.getName());
 	}
 
 	private void configureTestNativeBinaryClasspath(SourceSetContainer sourceSets, GraalVMExtension graalVmExtension) {
@@ -99,12 +96,6 @@ class NativeImagePluginAction implements PluginApplicationAction {
 		return extension;
 	}
 
-	private void configureGraalVmReachabilityExtension(GraalVMExtension graalVmExtension) {
-		GraalVMReachabilityMetadataRepositoryExtension extension = ((ExtensionAware) graalVmExtension).getExtensions()
-			.getByType(GraalVMReachabilityMetadataRepositoryExtension.class);
-		extension.getEnabled().set(true);
-	}
-
 	private void copyReachabilityMetadataToBootJar(Project project) {
 		project.getTasks()
 			.named(SpringBootPlugin.BOOT_JAR_TASK_NAME, BootJar.class)
@@ -115,7 +106,7 @@ class NativeImagePluginAction implements PluginApplicationAction {
 		project.getTasks()
 			.named(SpringBootPlugin.BOOT_BUILD_IMAGE_TASK_NAME, BootBuildImage.class)
 			.configure((bootBuildImage) -> {
-				bootBuildImage.getBuilder().convention("paketobuildpacks/builder:tiny");
+				bootBuildImage.getBuilder().convention("paketobuildpacks/builder-jammy-tiny:latest");
 				bootBuildImage.getEnvironment().put("BP_NATIVE_IMAGE", "true");
 			});
 	}

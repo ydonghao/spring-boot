@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2023 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,9 +24,9 @@ import java.util.Base64;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
-import java.util.function.Supplier;
 
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.boot.autoconfigure.condition.AnyNestedCondition;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -34,6 +34,7 @@ import org.springframework.boot.autoconfigure.security.ConditionalOnDefaultWebSe
 import org.springframework.boot.autoconfigure.security.oauth2.resource.IssuerUriCondition;
 import org.springframework.boot.autoconfigure.security.oauth2.resource.KeyValueCondition;
 import org.springframework.boot.autoconfigure.security.oauth2.resource.OAuth2ResourceServerProperties;
+import org.springframework.boot.context.properties.PropertyMapper;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Conditional;
 import org.springframework.context.annotation.Configuration;
@@ -49,6 +50,8 @@ import org.springframework.security.oauth2.jwt.JwtValidators;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder.JwkSetUriJwtDecoderBuilder;
 import org.springframework.security.oauth2.jwt.SupplierJwtDecoder;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
+import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.util.CollectionUtils;
 
@@ -63,6 +66,8 @@ import static org.springframework.security.config.Customizer.withDefaults;
  * @author Artsiom Yudovin
  * @author HaiTao Zhang
  * @author Mushtaq Ahmed
+ * @author Roman Golovin
+ * @author Yan Kardziyaka
  */
 @Configuration(proxyBeanMethods = false)
 class OAuth2ResourceServerJwtConfiguration {
@@ -73,8 +78,12 @@ class OAuth2ResourceServerJwtConfiguration {
 
 		private final OAuth2ResourceServerProperties.Jwt properties;
 
-		JwtDecoderConfiguration(OAuth2ResourceServerProperties properties) {
+		private final List<OAuth2TokenValidator<Jwt>> additionalValidators;
+
+		JwtDecoderConfiguration(OAuth2ResourceServerProperties properties,
+				ObjectProvider<OAuth2TokenValidator<Jwt>> additionalValidators) {
 			this.properties = properties.getJwt();
+			this.additionalValidators = additionalValidators.orderedStream().toList();
 		}
 
 		@Bean
@@ -85,8 +94,8 @@ class OAuth2ResourceServerJwtConfiguration {
 			customizers.orderedStream().forEach((customizer) -> customizer.customize(builder));
 			NimbusJwtDecoder nimbusJwtDecoder = builder.build();
 			String issuerUri = this.properties.getIssuerUri();
-			Supplier<OAuth2TokenValidator<Jwt>> defaultValidator = (issuerUri != null)
-					? () -> JwtValidators.createDefaultWithIssuer(issuerUri) : JwtValidators::createDefault;
+			OAuth2TokenValidator<Jwt> defaultValidator = (issuerUri != null)
+					? JwtValidators.createDefaultWithIssuer(issuerUri) : JwtValidators.createDefault();
 			nimbusJwtDecoder.setJwtValidator(getValidators(defaultValidator));
 			return nimbusJwtDecoder;
 		}
@@ -97,16 +106,18 @@ class OAuth2ResourceServerJwtConfiguration {
 			}
 		}
 
-		private OAuth2TokenValidator<Jwt> getValidators(Supplier<OAuth2TokenValidator<Jwt>> defaultValidator) {
-			OAuth2TokenValidator<Jwt> defaultValidators = defaultValidator.get();
+		private OAuth2TokenValidator<Jwt> getValidators(OAuth2TokenValidator<Jwt> defaultValidator) {
 			List<String> audiences = this.properties.getAudiences();
-			if (CollectionUtils.isEmpty(audiences)) {
-				return defaultValidators;
+			if (CollectionUtils.isEmpty(audiences) && this.additionalValidators.isEmpty()) {
+				return defaultValidator;
 			}
 			List<OAuth2TokenValidator<Jwt>> validators = new ArrayList<>();
-			validators.add(defaultValidators);
-			validators.add(new JwtClaimValidator<List<String>>(JwtClaimNames.AUD,
-					(aud) -> aud != null && !Collections.disjoint(aud, audiences)));
+			validators.add(defaultValidator);
+			if (!CollectionUtils.isEmpty(audiences)) {
+				validators.add(new JwtClaimValidator<List<String>>(JwtClaimNames.AUD,
+						(aud) -> aud != null && !Collections.disjoint(aud, audiences)));
+			}
+			validators.addAll(this.additionalValidators);
 			return new DelegatingOAuth2TokenValidator<>(validators);
 		}
 
@@ -118,7 +129,7 @@ class OAuth2ResourceServerJwtConfiguration {
 			NimbusJwtDecoder jwtDecoder = NimbusJwtDecoder.withPublicKey(publicKey)
 				.signatureAlgorithm(SignatureAlgorithm.from(exactlyOneAlgorithm()))
 				.build();
-			jwtDecoder.setJwtValidator(getValidators(JwtValidators::createDefault));
+			jwtDecoder.setJwtValidator(getValidators(JwtValidators.createDefault()));
 			return jwtDecoder;
 		}
 
@@ -146,7 +157,7 @@ class OAuth2ResourceServerJwtConfiguration {
 				JwkSetUriJwtDecoderBuilder builder = NimbusJwtDecoder.withIssuerLocation(issuerUri);
 				customizers.orderedStream().forEach((customizer) -> customizer.customize(builder));
 				NimbusJwtDecoder jwtDecoder = builder.build();
-				jwtDecoder.setJwtValidator(getValidators(() -> JwtValidators.createDefaultWithIssuer(issuerUri)));
+				jwtDecoder.setJwtValidator(getValidators(JwtValidators.createDefaultWithIssuer(issuerUri)));
 				return jwtDecoder;
 			});
 		}
@@ -163,6 +174,57 @@ class OAuth2ResourceServerJwtConfiguration {
 			http.authorizeHttpRequests((requests) -> requests.anyRequest().authenticated());
 			http.oauth2ResourceServer((resourceServer) -> resourceServer.jwt(withDefaults()));
 			return http.build();
+		}
+
+	}
+
+	@Configuration(proxyBeanMethods = false)
+	@ConditionalOnMissingBean(JwtAuthenticationConverter.class)
+	@Conditional(JwtConverterPropertiesCondition.class)
+	static class JwtConverterConfiguration {
+
+		private final OAuth2ResourceServerProperties.Jwt properties;
+
+		JwtConverterConfiguration(OAuth2ResourceServerProperties properties) {
+			this.properties = properties.getJwt();
+		}
+
+		@Bean
+		JwtAuthenticationConverter getJwtAuthenticationConverter() {
+			JwtGrantedAuthoritiesConverter grantedAuthoritiesConverter = new JwtGrantedAuthoritiesConverter();
+			PropertyMapper map = PropertyMapper.get().alwaysApplyingWhenNonNull();
+			map.from(this.properties.getAuthorityPrefix()).to(grantedAuthoritiesConverter::setAuthorityPrefix);
+			map.from(this.properties.getAuthoritiesClaimDelimiter())
+				.to(grantedAuthoritiesConverter::setAuthoritiesClaimDelimiter);
+			map.from(this.properties.getAuthoritiesClaimName())
+				.to(grantedAuthoritiesConverter::setAuthoritiesClaimName);
+			JwtAuthenticationConverter jwtAuthenticationConverter = new JwtAuthenticationConverter();
+			map.from(this.properties.getPrincipalClaimName()).to(jwtAuthenticationConverter::setPrincipalClaimName);
+			jwtAuthenticationConverter.setJwtGrantedAuthoritiesConverter(grantedAuthoritiesConverter);
+			return jwtAuthenticationConverter;
+		}
+
+	}
+
+	private static class JwtConverterPropertiesCondition extends AnyNestedCondition {
+
+		JwtConverterPropertiesCondition() {
+			super(ConfigurationPhase.REGISTER_BEAN);
+		}
+
+		@ConditionalOnProperty(prefix = "spring.security.oauth2.resourceserver.jwt", name = "authority-prefix")
+		static class OnAuthorityPrefix {
+
+		}
+
+		@ConditionalOnProperty(prefix = "spring.security.oauth2.resourceserver.jwt", name = "principal-claim-name")
+		static class OnPrincipalClaimName {
+
+		}
+
+		@ConditionalOnProperty(prefix = "spring.security.oauth2.resourceserver.jwt", name = "authorities-claim-name")
+		static class OnAuthoritiesClaimName {
+
 		}
 
 	}

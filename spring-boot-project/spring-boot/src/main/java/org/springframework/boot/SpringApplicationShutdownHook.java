@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2023 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -62,10 +62,16 @@ class SpringApplicationShutdownHook implements Runnable {
 
 	private final AtomicBoolean shutdownHookAdded = new AtomicBoolean();
 
+	private volatile boolean shutdownHookAdditionEnabled = false;
+
 	private boolean inProgress;
 
 	SpringApplicationShutdownHandlers getHandlers() {
 		return this.handlers;
+	}
+
+	void enableShutdownHookAddition() {
+		this.shutdownHookAdditionEnabled = true;
 	}
 
 	void registerApplicationContext(ConfigurableApplicationContext context) {
@@ -78,7 +84,7 @@ class SpringApplicationShutdownHook implements Runnable {
 	}
 
 	private void addRuntimeShutdownHookIfNecessary() {
-		if (this.shutdownHookAdded.compareAndSet(false, true)) {
+		if (this.shutdownHookAdditionEnabled && this.shutdownHookAdded.compareAndSet(false, true)) {
 			addRuntimeShutdownHook();
 		}
 	}
@@ -163,7 +169,7 @@ class SpringApplicationShutdownHook implements Runnable {
 	/**
 	 * The handler actions for this shutdown hook.
 	 */
-	private class Handlers implements SpringApplicationShutdownHandlers, Runnable {
+	private final class Handlers implements SpringApplicationShutdownHandlers, Runnable {
 
 		private final Set<Runnable> actions = Collections.newSetFromMap(new IdentityHashMap<>());
 
@@ -201,7 +207,7 @@ class SpringApplicationShutdownHook implements Runnable {
 	/**
 	 * {@link ApplicationListener} to track closed contexts.
 	 */
-	private class ApplicationContextClosedListener implements ApplicationListener<ContextClosedEvent> {
+	private final class ApplicationContextClosedListener implements ApplicationListener<ContextClosedEvent> {
 
 		@Override
 		public void onApplicationEvent(ContextClosedEvent event) {

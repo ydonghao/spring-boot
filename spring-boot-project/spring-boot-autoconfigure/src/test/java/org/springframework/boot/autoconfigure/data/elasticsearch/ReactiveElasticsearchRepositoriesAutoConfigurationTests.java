@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2023 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -32,12 +32,11 @@ import org.springframework.boot.autoconfigure.data.empty.EmptyDataPackage;
 import org.springframework.boot.autoconfigure.elasticsearch.ElasticsearchClientAutoConfiguration;
 import org.springframework.boot.autoconfigure.elasticsearch.ElasticsearchRestClientAutoConfiguration;
 import org.springframework.boot.autoconfigure.elasticsearch.ReactiveElasticsearchClientAutoConfiguration;
-import org.springframework.boot.autoconfigure.logging.ConditionEvaluationReportLoggingListener;
-import org.springframework.boot.logging.LogLevel;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.boot.testsupport.testcontainers.DockerImageNames;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.elasticsearch.client.elc.ReactiveElasticsearchTemplate;
+import org.springframework.data.elasticsearch.config.EnableElasticsearchAuditing;
 import org.springframework.data.elasticsearch.repository.config.EnableReactiveElasticsearchRepositories;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -48,6 +47,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * @author Phillip Webb
  * @author Andy Wilkinson
  * @author Brian Clozel
+ * @author Scott Frederick
  */
 @Testcontainers(disabledWithoutDocker = true)
 class ReactiveElasticsearchRepositoriesAutoConfigurationTests {
@@ -65,8 +65,7 @@ class ReactiveElasticsearchRepositoriesAutoConfigurationTests {
 				ReactiveElasticsearchClientAutoConfiguration.class))
 		.withPropertyValues(
 				"spring.elasticsearch.uris=" + elasticsearch.getHost() + ":" + elasticsearch.getFirstMappedPort(),
-				"spring.elasticsearch.socket-timeout=30s")
-		.withInitializer(ConditionEvaluationReportLoggingListener.forLogLevel(LogLevel.INFO));
+				"spring.elasticsearch.socket-timeout=30s");
 
 	@Test
 	void testDefaultRepositoryConfiguration() {
@@ -87,6 +86,12 @@ class ReactiveElasticsearchRepositoriesAutoConfigurationTests {
 			.run((context) -> assertThat(context).hasSingleBean(CityReactiveElasticsearchDbRepository.class));
 	}
 
+	@Test
+	void testAuditingConfiguration() {
+		this.contextRunner.withUserConfiguration(AuditingConfiguration.class)
+			.run((context) -> assertThat(context).hasSingleBean(ReactiveElasticsearchTemplate.class));
+	}
+
 	@Configuration(proxyBeanMethods = false)
 	@TestAutoConfigurationPackage(City.class)
 	static class TestConfiguration {
@@ -103,6 +108,14 @@ class ReactiveElasticsearchRepositoriesAutoConfigurationTests {
 	@TestAutoConfigurationPackage(ReactiveElasticsearchRepositoriesAutoConfigurationTests.class)
 	@EnableReactiveElasticsearchRepositories(basePackageClasses = CityReactiveElasticsearchDbRepository.class)
 	static class CustomizedConfiguration {
+
+	}
+
+	@Configuration(proxyBeanMethods = false)
+	@TestAutoConfigurationPackage(ElasticsearchRepositoriesAutoConfigurationTests.class)
+	@EnableReactiveElasticsearchRepositories
+	@EnableElasticsearchAuditing
+	static class AuditingConfiguration {
 
 	}
 

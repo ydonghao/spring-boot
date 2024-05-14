@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2023 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,12 +21,11 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import com.mongodb.ConnectionString;
 import com.mongodb.MongoClientSettings;
+import com.mongodb.MongoCredential;
 import com.mongodb.ReadPreference;
-import com.mongodb.connection.AsynchronousSocketChannelStreamFactoryFactory;
+import com.mongodb.connection.NettyTransportSettings;
 import com.mongodb.connection.SslSettings;
-import com.mongodb.connection.StreamFactory;
-import com.mongodb.connection.StreamFactoryFactory;
-import com.mongodb.connection.netty.NettyStreamFactoryFactory;
+import com.mongodb.connection.TransportSettings;
 import com.mongodb.reactivestreams.client.MongoClient;
 import com.mongodb.reactivestreams.client.internal.MongoClientImpl;
 import io.netty.channel.EventLoopGroup;
@@ -38,12 +37,8 @@ import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.test.util.ReflectionTestUtils;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.BDDMockito.given;
-import static org.mockito.Mockito.mock;
 
 /**
  * Tests for {@link MongoReactiveAutoConfiguration}.
@@ -84,7 +79,7 @@ class MongoReactiveAutoConfigurationTests {
 				assertThat(context).hasSingleBean(MongoClient.class);
 				MongoClientSettings settings = getSettings(context);
 				assertThat(settings.getApplicationName()).isEqualTo("test-config");
-				assertThat(settings.getStreamFactoryFactory()).isSameAs(context.getBean("myStreamFactoryFactory"));
+				assertThat(settings.getTransportSettings()).isSameAs(context.getBean("myTransportSettings"));
 			});
 	}
 
@@ -122,13 +117,102 @@ class MongoReactiveAutoConfigurationTests {
 	}
 
 	@Test
-	void nettyStreamFactoryFactoryIsConfiguredAutomatically() {
+	void doesNotConfigureCredentialsWithoutUsername() {
+		this.contextRunner
+			.withPropertyValues("spring.data.mongodb.password=secret",
+					"spring.data.mongodb.authentication-database=authdb")
+			.run((context) -> assertThat(getSettings(context).getCredential()).isNull());
+	}
+
+	@Test
+	void configuresCredentialsFromPropertiesWithDefaultDatabase() {
+		this.contextRunner
+			.withPropertyValues("spring.data.mongodb.username=user", "spring.data.mongodb.password=secret")
+			.run((context) -> {
+				MongoCredential credential = getSettings(context).getCredential();
+				assertThat(credential.getUserName()).isEqualTo("user");
+				assertThat(credential.getPassword()).isEqualTo("secret".toCharArray());
+				assertThat(credential.getSource()).isEqualTo("test");
+			});
+	}
+
+	@Test
+	void configuresCredentialsFromPropertiesWithDatabase() {
+		this.contextRunner
+			.withPropertyValues("spring.data.mongodb.username=user", "spring.data.mongodb.password=secret",
+					"spring.data.mongodb.database=mydb")
+			.run((context) -> {
+				MongoCredential credential = getSettings(context).getCredential();
+				assertThat(credential.getUserName()).isEqualTo("user");
+				assertThat(credential.getPassword()).isEqualTo("secret".toCharArray());
+				assertThat(credential.getSource()).isEqualTo("mydb");
+			});
+	}
+
+	@Test
+	void configuresCredentialsFromPropertiesWithAuthDatabase() {
+		this.contextRunner
+			.withPropertyValues("spring.data.mongodb.username=user", "spring.data.mongodb.password=secret",
+					"spring.data.mongodb.database=mydb", "spring.data.mongodb.authentication-database=authdb")
+			.run((context) -> {
+				MongoCredential credential = getSettings(context).getCredential();
+				assertThat(credential.getUserName()).isEqualTo("user");
+				assertThat(credential.getPassword()).isEqualTo("secret".toCharArray());
+				assertThat(credential.getSource()).isEqualTo("authdb");
+			});
+	}
+
+	@Test
+	void doesNotConfigureCredentialsWithoutUsernameInUri() {
+		this.contextRunner.withPropertyValues("spring.data.mongodb.uri=mongodb://localhost/mydb?authSource=authdb")
+			.run((context) -> assertThat(getSettings(context).getCredential()).isNull());
+	}
+
+	@Test
+	void configuresCredentialsFromUriPropertyWithDefaultDatabase() {
+		this.contextRunner.withPropertyValues("spring.data.mongodb.uri=mongodb://user:secret@localhost/")
+			.run((context) -> {
+				MongoCredential credential = getSettings(context).getCredential();
+				assertThat(credential.getUserName()).isEqualTo("user");
+				assertThat(credential.getPassword()).isEqualTo("secret".toCharArray());
+				assertThat(credential.getSource()).isEqualTo("admin");
+			});
+	}
+
+	@Test
+	void configuresCredentialsFromUriPropertyWithDatabase() {
+		this.contextRunner
+			.withPropertyValues("spring.data.mongodb.uri=mongodb://user:secret@localhost/mydb",
+					"spring.data.mongodb.database=notused", "spring.data.mongodb.authentication-database=notused")
+			.run((context) -> {
+				MongoCredential credential = getSettings(context).getCredential();
+				assertThat(credential.getUserName()).isEqualTo("user");
+				assertThat(credential.getPassword()).isEqualTo("secret".toCharArray());
+				assertThat(credential.getSource()).isEqualTo("mydb");
+			});
+	}
+
+	@Test
+	void configuresCredentialsFromUriPropertyWithAuthDatabase() {
+		this.contextRunner
+			.withPropertyValues("spring.data.mongodb.uri=mongodb://user:secret@localhost/mydb?authSource=authdb",
+					"spring.data.mongodb.database=notused", "spring.data.mongodb.authentication-database=notused")
+			.run((context) -> {
+				MongoCredential credential = getSettings(context).getCredential();
+				assertThat(credential.getUserName()).isEqualTo("user");
+				assertThat(credential.getPassword()).isEqualTo("secret".toCharArray());
+				assertThat(credential.getSource()).isEqualTo("authdb");
+			});
+	}
+
+	@Test
+	void nettyTransportSettingsAreConfiguredAutomatically() {
 		AtomicReference<EventLoopGroup> eventLoopGroupReference = new AtomicReference<>();
 		this.contextRunner.run((context) -> {
 			assertThat(context).hasSingleBean(MongoClient.class);
-			StreamFactoryFactory factory = getSettings(context).getStreamFactoryFactory();
-			assertThat(factory).isInstanceOf(NettyStreamFactoryFactory.class);
-			EventLoopGroup eventLoopGroup = (EventLoopGroup) ReflectionTestUtils.getField(factory, "eventLoopGroup");
+			TransportSettings transportSettings = getSettings(context).getTransportSettings();
+			assertThat(transportSettings).isInstanceOf(NettyTransportSettings.class);
+			EventLoopGroup eventLoopGroup = ((NettyTransportSettings) transportSettings).getEventLoopGroup();
 			assertThat(eventLoopGroup.isShutdown()).isFalse();
 			eventLoopGroupReference.set(eventLoopGroup);
 		});
@@ -136,14 +220,16 @@ class MongoReactiveAutoConfigurationTests {
 	}
 
 	@Test
-	void customizerOverridesAutoConfig() {
+	@SuppressWarnings("deprecation")
+	void customizerWithTransportSettingsOverridesAutoConfig() {
 		this.contextRunner.withPropertyValues("spring.data.mongodb.uri:mongodb://localhost/test?appname=auto-config")
-			.withUserConfiguration(SimpleCustomizerConfig.class)
+			.withUserConfiguration(SimpleTransportSettingsCustomizerConfig.class)
 			.run((context) -> {
 				assertThat(context).hasSingleBean(MongoClient.class);
 				MongoClientSettings settings = getSettings(context);
-				assertThat(settings.getApplicationName()).isEqualTo("overridden-name");
-				assertThat(settings.getStreamFactoryFactory()).isEqualTo(SimpleCustomizerConfig.streamFactoryFactory);
+				assertThat(settings.getApplicationName()).isEqualTo("custom-transport-settings");
+				assertThat(settings.getTransportSettings())
+					.isSameAs(SimpleTransportSettingsCustomizerConfig.transportSettings);
 			});
 	}
 
@@ -164,6 +250,12 @@ class MongoReactiveAutoConfigurationTests {
 		})
 			.run((context) -> assertThat(context).hasSingleBean(MongoConnectionDetails.class)
 				.doesNotHaveBean(PropertiesMongoConnectionDetails.class));
+	}
+
+	@Test
+	void uuidRepresentationDefaultsAreAligned() {
+		this.contextRunner.run((context) -> assertThat(getSettings(context).getUuidRepresentation())
+			.isEqualTo(new MongoProperties().getUuidRepresentation()));
 	}
 
 	private MongoClientSettings getSettings(ApplicationContext context) {
@@ -188,32 +280,29 @@ class MongoReactiveAutoConfigurationTests {
 	static class SslSettingsConfig {
 
 		@Bean
-		MongoClientSettings mongoClientSettings(StreamFactoryFactory streamFactoryFactory) {
+		MongoClientSettings mongoClientSettings(TransportSettings transportSettings) {
 			return MongoClientSettings.builder()
 				.applicationName("test-config")
-				.streamFactoryFactory(streamFactoryFactory)
+				.transportSettings(transportSettings)
 				.build();
 		}
 
 		@Bean
-		StreamFactoryFactory myStreamFactoryFactory() {
-			StreamFactoryFactory streamFactoryFactory = mock(StreamFactoryFactory.class);
-			given(streamFactoryFactory.create(any(), any())).willReturn(mock(StreamFactory.class));
-			return streamFactoryFactory;
+		TransportSettings myTransportSettings() {
+			return TransportSettings.nettyBuilder().build();
 		}
 
 	}
 
 	@Configuration(proxyBeanMethods = false)
-	static class SimpleCustomizerConfig {
+	static class SimpleTransportSettingsCustomizerConfig {
 
-		private static final StreamFactoryFactory streamFactoryFactory = new AsynchronousSocketChannelStreamFactoryFactory.Builder()
-			.build();
+		private static final TransportSettings transportSettings = TransportSettings.nettyBuilder().build();
 
 		@Bean
 		MongoClientSettingsBuilderCustomizer customizer() {
-			return (clientSettingsBuilder) -> clientSettingsBuilder.applicationName("overridden-name")
-				.streamFactoryFactory(streamFactoryFactory);
+			return (clientSettingsBuilder) -> clientSettingsBuilder.applicationName("custom-transport-settings")
+				.transportSettings(transportSettings);
 		}
 
 	}

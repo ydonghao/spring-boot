@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2023 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@
 
 package org.springframework.boot.autoconfigure.graphql.servlet;
 
+import java.time.Duration;
 import java.util.Map;
 
 import graphql.schema.idl.TypeRuntimeWiring;
@@ -43,12 +44,14 @@ import org.springframework.graphql.server.webmvc.GraphQlWebSocketHandler;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.web.servlet.HandlerMapping;
 import org.springframework.web.servlet.function.RouterFunction;
+import org.springframework.web.servlet.function.support.RouterFunctionMapping;
+import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping;
+import org.springframework.web.socket.server.support.WebSocketHandlerMapping;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.asyncDispatch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -84,11 +87,26 @@ class GraphQlWebMvcAutoConfigurationTests {
 	void simpleQueryShouldWork() {
 		testWith((mockMvc) -> {
 			String query = "{ bookById(id: \\\"book-1\\\"){ id name pageCount author } }";
-			MvcResult result = mockMvc.perform(post("/graphql").content("{\"query\": \"" + query + "\"}")).andReturn();
-			mockMvc.perform(asyncDispatch(result))
+			mockMvc.perform(post("/graphql").content("{\"query\": \"" + query + "\"}"))
 				.andExpect(status().isOk())
 				.andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_GRAPHQL_RESPONSE))
 				.andExpect(jsonPath("data.bookById.name").value("GraphQL for beginners"));
+		});
+	}
+
+	@Test
+	void SseSubscriptionShouldWork() {
+		testWith((mockMvc) -> {
+			String query = "{ booksOnSale(minPages: 50){ id name pageCount author } }";
+			mockMvc
+				.perform(post("/graphql").accept(MediaType.TEXT_EVENT_STREAM)
+					.content("{\"query\": \"subscription TestSubscription " + query + "\"}"))
+				.andExpect(status().isOk())
+				.andExpect(content().contentTypeCompatibleWith(MediaType.TEXT_EVENT_STREAM))
+				.andExpect(content().string(Matchers.stringContainsInOrder("event:next",
+						"data:{\"data\":{\"booksOnSale\":{\"id\":\"book-1\",\"name\":\"GraphQL for beginners\",\"pageCount\":100,\"author\":\"John GraphQL\"}}}",
+						"event:next",
+						"data:{\"data\":{\"booksOnSale\":{\"id\":\"book-2\",\"name\":\"Harry Potter and the Philosopher's Stone\",\"pageCount\":223,\"author\":\"Joanne Rowling\"}}}")));
 		});
 	}
 
@@ -116,8 +134,7 @@ class GraphQlWebMvcAutoConfigurationTests {
 	void shouldConfigureWebInterceptors() {
 		testWith((mockMvc) -> {
 			String query = "{ bookById(id: \\\"book-1\\\"){ id name pageCount author } }";
-			MvcResult result = mockMvc.perform(post("/graphql").content("{\"query\": \"" + query + "\"}")).andReturn();
-			mockMvc.perform(asyncDispatch(result))
+			mockMvc.perform(post("/graphql").content("{\"query\": \"" + query + "\"}"))
 				.andExpect(status().isOk())
 				.andExpect(header().string("X-Custom-Header", "42"));
 		});
@@ -148,12 +165,10 @@ class GraphQlWebMvcAutoConfigurationTests {
 		testWith((mockMvc) -> {
 			String query = "{" + "  bookById(id: \\\"book-1\\\"){ " + "    id" + "    name" + "    pageCount"
 					+ "    author" + "  }" + "}";
-			MvcResult result = mockMvc
+			mockMvc
 				.perform(post("/graphql").header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "POST")
 					.header(HttpHeaders.ORIGIN, "https://example.com")
 					.content("{\"query\": \"" + query + "\"}"))
-				.andReturn();
-			mockMvc.perform(asyncDispatch(result))
 				.andExpect(status().isOk())
 				.andExpect(header().stringValues(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, "https://example.com"))
 				.andExpect(header().stringValues(HttpHeaders.ACCESS_CONTROL_ALLOW_CREDENTIALS, "true"));
@@ -162,8 +177,26 @@ class GraphQlWebMvcAutoConfigurationTests {
 
 	@Test
 	void shouldConfigureWebSocketBeans() {
-		this.contextRunner.withPropertyValues("spring.graphql.websocket.path=/ws")
-			.run((context) -> assertThat(context).hasSingleBean(GraphQlWebSocketHandler.class));
+		this.contextRunner.withPropertyValues("spring.graphql.websocket.path=/ws").run((context) -> {
+			assertThat(context).hasSingleBean(GraphQlWebSocketHandler.class);
+			assertThat(context.getBeanProvider(HandlerMapping.class).orderedStream().toList()).containsSubsequence(
+					context.getBean(WebSocketHandlerMapping.class), context.getBean(RouterFunctionMapping.class),
+					context.getBean(RequestMappingHandlerMapping.class));
+		});
+	}
+
+	@Test
+	void shouldConfigureWebSocketProperties() {
+		this.contextRunner
+			.withPropertyValues("spring.graphql.websocket.path=/ws",
+					"spring.graphql.websocket.connection-init-timeout=120s", "spring.graphql.websocket.keep-alive=30s")
+			.run((context) -> {
+				assertThat(context).hasSingleBean(GraphQlWebSocketHandler.class);
+				GraphQlWebSocketHandler graphQlWebSocketHandler = context.getBean(GraphQlWebSocketHandler.class);
+				assertThat(graphQlWebSocketHandler).extracting("initTimeoutDuration")
+					.isEqualTo(Duration.ofSeconds(120));
+				assertThat(graphQlWebSocketHandler).extracting("keepAliveDuration").isEqualTo(Duration.ofSeconds(30));
+			});
 	}
 
 	@Test
@@ -205,8 +238,12 @@ class GraphQlWebMvcAutoConfigurationTests {
 
 		@Bean
 		RuntimeWiringConfigurer bookDataFetcher() {
-			return (builder) -> builder.type(TypeRuntimeWiring.newTypeWiring("Query")
-				.dataFetcher("bookById", GraphQlTestDataFetchers.getBookByIdDataFetcher()));
+			return (builder) -> {
+				builder.type(TypeRuntimeWiring.newTypeWiring("Query")
+					.dataFetcher("bookById", GraphQlTestDataFetchers.getBookByIdDataFetcher()));
+				builder.type(TypeRuntimeWiring.newTypeWiring("Subscription")
+					.dataFetcher("booksOnSale", GraphQlTestDataFetchers.getBooksOnSaleDataFetcher()));
+			};
 		}
 
 	}

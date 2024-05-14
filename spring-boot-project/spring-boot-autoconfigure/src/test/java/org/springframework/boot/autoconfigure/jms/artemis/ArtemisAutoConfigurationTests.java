@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2023 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -46,6 +46,8 @@ import org.messaginghub.pooled.jms.JmsPoolConnectionFactory;
 
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.autoconfigure.jms.JmsAutoConfiguration;
+import org.springframework.boot.autoconfigure.jms.artemis.ArtemisAutoConfiguration.PropertiesArtemisConnectionDetails;
+import org.springframework.boot.test.context.FilteredClassLoader;
 import org.springframework.boot.test.context.assertj.AssertableApplicationContext;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.ApplicationContext;
@@ -356,6 +358,41 @@ class ArtemisAutoConfigurationTests {
 		});
 	}
 
+	@Test
+	void cachingConnectionFactoryNotOnTheClasspathThenSimpleConnectionFactoryAutoConfigured() {
+		this.contextRunner.withClassLoader(new FilteredClassLoader(CachingConnectionFactory.class))
+			.withPropertyValues("spring.artemis.pool.enabled=false", "spring.jms.cache.enabled=false")
+			.run((context) -> assertThat(context).hasSingleBean(ActiveMQConnectionFactory.class));
+	}
+
+	@Test
+	void cachingConnectionFactoryNotOnTheClasspathAndCacheEnabledThenSimpleConnectionFactoryNotConfigured() {
+		this.contextRunner.withClassLoader(new FilteredClassLoader(CachingConnectionFactory.class))
+			.withPropertyValues("spring.artemis.pool.enabled=false", "spring.jms.cache.enabled=true")
+			.run((context) -> assertThat(context).doesNotHaveBean(ActiveMQConnectionFactory.class));
+	}
+
+	@Test
+	void definesPropertiesBasedConnectionDetailsByDefault() {
+		this.contextRunner
+			.run((context) -> assertThat(context).hasSingleBean(PropertiesArtemisConnectionDetails.class));
+	}
+
+	@Test
+	void testConnectionFactoryWithOverridesWhenUsingCustomConnectionDetails() {
+		this.contextRunner.withClassLoader(new FilteredClassLoader(CachingConnectionFactory.class))
+			.withPropertyValues("spring.artemis.pool.enabled=false", "spring.jms.cache.enabled=false")
+			.withUserConfiguration(TestConnectionDetailsConfiguration.class)
+			.run((context) -> {
+				assertThat(context).hasSingleBean(ArtemisConnectionDetails.class)
+					.doesNotHaveBean(PropertiesArtemisConnectionDetails.class);
+				ActiveMQConnectionFactory connectionFactory = context.getBean(ActiveMQConnectionFactory.class);
+				assertThat(connectionFactory.toURI().toString()).startsWith("tcp://localhost:12345");
+				assertThat(connectionFactory.getUser()).isEqualTo("springuser");
+				assertThat(connectionFactory.getPassword()).isEqualTo("spring");
+			});
+	}
+
 	private ConnectionFactory getConnectionFactory(AssertableApplicationContext context) {
 		assertThat(context).hasSingleBean(ConnectionFactory.class).hasBean("jmsConnectionFactory");
 		ConnectionFactory connectionFactory = context.getBean(ConnectionFactory.class);
@@ -476,6 +513,38 @@ class ArtemisAutoConfigurationTests {
 			return (configuration) -> {
 				configuration.setClusterPassword("Foobar");
 				configuration.setName("customFooBar");
+			};
+		}
+
+	}
+
+	@Configuration(proxyBeanMethods = false)
+	static class TestConnectionDetailsConfiguration {
+
+		@Bean
+		ArtemisConnectionDetails activemqConnectionDetails() {
+			return new ArtemisConnectionDetails() {
+
+				@Override
+				public ArtemisMode getMode() {
+					return ArtemisMode.NATIVE;
+				}
+
+				@Override
+				public String getBrokerUrl() {
+					return "tcp://localhost:12345";
+				}
+
+				@Override
+				public String getUser() {
+					return "springuser";
+				}
+
+				@Override
+				public String getPassword() {
+					return "spring";
+				}
+
 			};
 		}
 

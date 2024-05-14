@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2023 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -36,6 +36,7 @@ import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
  * Tests for {@link ArchitectureCheck}.
  *
  * @author Andy Wilkinson
+ * @author Scott Frederick
  */
 class ArchitectureCheckTests {
 
@@ -46,7 +47,7 @@ class ArchitectureCheckTests {
 	void whenPackagesAreTangledTaskFailsAndWritesAReport() throws Exception {
 		prepareTask("tangled", (architectureCheck) -> {
 			assertThatExceptionOfType(GradleException.class).isThrownBy(architectureCheck::checkArchitecture);
-			assertThat(failureReport(architectureCheck).length()).isGreaterThan(0);
+			assertThat(failureReport(architectureCheck)).isNotEmpty();
 		});
 	}
 
@@ -54,7 +55,7 @@ class ArchitectureCheckTests {
 	void whenPackagesAreNotTangledTaskSucceedsAndWritesAnEmptyReport() throws Exception {
 		prepareTask("untangled", (architectureCheck) -> {
 			architectureCheck.checkArchitecture();
-			assertThat(failureReport(architectureCheck).length()).isZero();
+			assertThat(failureReport(architectureCheck)).isEmpty();
 		});
 	}
 
@@ -66,7 +67,7 @@ class ArchitectureCheckTests {
 	void whenBeanPostProcessorBeanMethodIsNotStaticTaskFailsAndWritesAReport() throws Exception {
 		prepareTask("bpp/nonstatic", (architectureCheck) -> {
 			assertThatExceptionOfType(GradleException.class).isThrownBy(architectureCheck::checkArchitecture);
-			assertThat(failureReport(architectureCheck).length()).isGreaterThan(0);
+			assertThat(failureReport(architectureCheck)).isNotEmpty();
 		});
 	}
 
@@ -74,7 +75,7 @@ class ArchitectureCheckTests {
 	void whenBeanPostProcessorBeanMethodIsStaticAndHasUnsafeParametersTaskFailsAndWritesAReport() throws Exception {
 		prepareTask("bpp/unsafeparameters", (architectureCheck) -> {
 			assertThatExceptionOfType(GradleException.class).isThrownBy(architectureCheck::checkArchitecture);
-			assertThat(failureReport(architectureCheck).length()).isGreaterThan(0);
+			assertThat(failureReport(architectureCheck)).isNotEmpty();
 		});
 	}
 
@@ -83,7 +84,7 @@ class ArchitectureCheckTests {
 			throws Exception {
 		prepareTask("bpp/safeparameters", (architectureCheck) -> {
 			architectureCheck.checkArchitecture();
-			assertThat(failureReport(architectureCheck).length()).isZero();
+			assertThat(failureReport(architectureCheck)).isEmpty();
 		});
 	}
 
@@ -92,7 +93,7 @@ class ArchitectureCheckTests {
 			throws Exception {
 		prepareTask("bpp/noparameters", (architectureCheck) -> {
 			architectureCheck.checkArchitecture();
-			assertThat(failureReport(architectureCheck).length()).isZero();
+			assertThat(failureReport(architectureCheck)).isEmpty();
 		});
 	}
 
@@ -100,7 +101,7 @@ class ArchitectureCheckTests {
 	void whenBeanFactoryPostProcessorBeanMethodIsNotStaticTaskFailsAndWritesAReport() throws Exception {
 		prepareTask("bfpp/nonstatic", (architectureCheck) -> {
 			assertThatExceptionOfType(GradleException.class).isThrownBy(architectureCheck::checkArchitecture);
-			assertThat(failureReport(architectureCheck).length()).isGreaterThan(0);
+			assertThat(failureReport(architectureCheck)).isNotEmpty();
 		});
 	}
 
@@ -108,7 +109,7 @@ class ArchitectureCheckTests {
 	void whenBeanFactoryPostProcessorBeanMethodIsStaticAndHasParametersTaskFailsAndWritesAReport() throws Exception {
 		prepareTask("bfpp/parameters", (architectureCheck) -> {
 			assertThatExceptionOfType(GradleException.class).isThrownBy(architectureCheck::checkArchitecture);
-			assertThat(failureReport(architectureCheck).length()).isGreaterThan(0);
+			assertThat(failureReport(architectureCheck)).isNotEmpty();
 		});
 	}
 
@@ -117,7 +118,23 @@ class ArchitectureCheckTests {
 			throws Exception {
 		prepareTask("bfpp/noparameters", (architectureCheck) -> {
 			architectureCheck.checkArchitecture();
-			assertThat(failureReport(architectureCheck).length()).isZero();
+			assertThat(failureReport(architectureCheck)).isEmpty();
+		});
+	}
+
+	@Test
+	void whenClassLoadsResourceUsingResourceUtilsTaskFailsAndWritesReport() throws Exception {
+		prepareTask("resources/loads", (architectureCheck) -> {
+			assertThatExceptionOfType(GradleException.class).isThrownBy(architectureCheck::checkArchitecture);
+			assertThat(failureReport(architectureCheck)).isNotEmpty();
+		});
+	}
+
+	@Test
+	void whenClassUsesResourceUtilsWithoutLoadingResourcesTaskSucceedsAndWritesAnEmptyReport() throws Exception {
+		prepareTask("resources/noloads", (architectureCheck) -> {
+			architectureCheck.checkArchitecture();
+			assertThat(failureReport(architectureCheck)).isEmpty();
 		});
 	}
 
@@ -136,7 +153,6 @@ class ArchitectureCheckTests {
 		Resource root = resolver.getResource("classpath:org/springframework/boot/build/architecture/" + name);
 		FileSystemUtils.copyRecursively(root.getFile(),
 				new File(projectDir, "classes/org/springframework/boot/build/architecture/" + name));
-
 	}
 
 	private interface Callback<T> {

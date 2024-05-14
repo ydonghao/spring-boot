@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2023 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -33,6 +33,7 @@ import org.gradle.api.tasks.bundling.Jar;
 import org.springframework.boot.build.ConventionsPlugin;
 import org.springframework.boot.build.DeployedPlugin;
 import org.springframework.boot.build.classpath.CheckClasspathForConflicts;
+import org.springframework.boot.build.classpath.CheckClasspathForUnconstrainedDirectDependencies;
 import org.springframework.boot.build.classpath.CheckClasspathForUnnecessaryExclusions;
 import org.springframework.util.StringUtils;
 
@@ -56,13 +57,14 @@ public class StarterPlugin implements Plugin<Project> {
 		Configuration runtimeClasspath = configurations.getByName(JavaPlugin.RUNTIME_CLASSPATH_CONFIGURATION_NAME);
 		starterMetadata.setDependencies(runtimeClasspath);
 		File destination = new File(project.getBuildDir(), "starter-metadata.properties");
-		starterMetadata.setDestination(destination);
+		starterMetadata.getDestination().set(destination);
 		configurations.create("starterMetadata");
 		project.getArtifacts()
 			.add("starterMetadata", project.provider(starterMetadata::getDestination),
 					(artifact) -> artifact.builtBy(starterMetadata));
 		createClasspathConflictsCheck(runtimeClasspath, project);
 		createUnnecessaryExclusionsCheck(runtimeClasspath, project);
+		createUnconstrainedDirectDependenciesCheck(runtimeClasspath, project);
 		configureJarManifest(project);
 	}
 
@@ -80,6 +82,17 @@ public class StarterPlugin implements Plugin<Project> {
 					CheckClasspathForUnnecessaryExclusions.class);
 		checkClasspathForUnnecessaryExclusions.setClasspath(classpath);
 		project.getTasks().getByName(JavaBasePlugin.CHECK_TASK_NAME).dependsOn(checkClasspathForUnnecessaryExclusions);
+	}
+
+	private void createUnconstrainedDirectDependenciesCheck(Configuration classpath, Project project) {
+		CheckClasspathForUnconstrainedDirectDependencies checkClasspathForUnconstrainedDirectDependencies = project
+			.getTasks()
+			.create("check" + StringUtils.capitalize(classpath.getName() + "ForUnconstrainedDirectDependencies"),
+					CheckClasspathForUnconstrainedDirectDependencies.class);
+		checkClasspathForUnconstrainedDirectDependencies.setClasspath(classpath);
+		project.getTasks()
+			.getByName(JavaBasePlugin.CHECK_TASK_NAME)
+			.dependsOn(checkClasspathForUnconstrainedDirectDependencies);
 	}
 
 	private void configureJarManifest(Project project) {

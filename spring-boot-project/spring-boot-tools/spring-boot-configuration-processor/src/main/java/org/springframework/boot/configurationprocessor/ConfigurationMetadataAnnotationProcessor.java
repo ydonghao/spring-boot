@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2023 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,14 +20,12 @@ import java.io.FileNotFoundException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.time.Duration;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashSet;
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.Stack;
 
 import javax.annotation.processing.AbstractProcessor;
 import javax.annotation.processing.ProcessingEnvironment;
@@ -57,6 +55,8 @@ import org.springframework.boot.configurationprocessor.metadata.ItemMetadata;
  * @author Phillip Webb
  * @author Kris De Volder
  * @author Jonas Keßler
+ * @author Scott Frederick
+ * @author Moritz Halbritter
  * @since 1.2.0
  */
 @SupportedAnnotationTypes({ ConfigurationMetadataAnnotationProcessor.AUTO_CONFIGURATION_ANNOTATION,
@@ -102,8 +102,7 @@ public class ConfigurationMetadataAnnotationProcessor extends AbstractProcessor 
 
 	static final String AUTO_CONFIGURATION_ANNOTATION = "org.springframework.boot.autoconfigure.AutoConfiguration";
 
-	private static final Set<String> SUPPORTED_OPTIONS = Collections
-		.unmodifiableSet(Collections.singleton(ADDITIONAL_METADATA_LOCATIONS_OPTION));
+	private static final Set<String> SUPPORTED_OPTIONS = Set.of(ADDITIONAL_METADATA_LOCATIONS_OPTION);
 
 	private MetadataStore metadataStore;
 
@@ -136,8 +135,8 @@ public class ConfigurationMetadataAnnotationProcessor extends AbstractProcessor 
 	}
 
 	protected Set<String> endpointAnnotations() {
-		return new HashSet<>(Arrays.asList(CONTROLLER_ENDPOINT_ANNOTATION, ENDPOINT_ANNOTATION, JMX_ENDPOINT_ANNOTATION,
-				REST_CONTROLLER_ENDPOINT_ANNOTATION, SERVLET_ENDPOINT_ANNOTATION, WEB_ENDPOINT_ANNOTATION));
+		return Set.of(CONTROLLER_ENDPOINT_ANNOTATION, ENDPOINT_ANNOTATION, JMX_ENDPOINT_ANNOTATION,
+				REST_CONTROLLER_ENDPOINT_ANNOTATION, SERVLET_ENDPOINT_ANNOTATION, WEB_ENDPOINT_ANNOTATION);
 	}
 
 	protected String readOperationAnnotation() {
@@ -213,10 +212,10 @@ public class ConfigurationMetadataAnnotationProcessor extends AbstractProcessor 
 			if (annotation != null) {
 				String prefix = getPrefix(annotation);
 				if (element instanceof TypeElement typeElement) {
-					processAnnotatedTypeElement(prefix, typeElement, new Stack<>());
+					processAnnotatedTypeElement(prefix, typeElement, new ArrayDeque<>());
 				}
 				else if (element instanceof ExecutableElement executableElement) {
-					processExecutableElement(prefix, executableElement, new Stack<>());
+					processExecutableElement(prefix, executableElement, new ArrayDeque<>());
 				}
 			}
 		}
@@ -225,13 +224,13 @@ public class ConfigurationMetadataAnnotationProcessor extends AbstractProcessor 
 		}
 	}
 
-	private void processAnnotatedTypeElement(String prefix, TypeElement element, Stack<TypeElement> seen) {
+	private void processAnnotatedTypeElement(String prefix, TypeElement element, Deque<TypeElement> seen) {
 		String type = this.metadataEnv.getTypeUtils().getQualifiedName(element);
 		this.metadataCollector.add(ItemMetadata.newGroup(prefix, type, type, null));
 		processTypeElement(prefix, element, null, seen);
 	}
 
-	private void processExecutableElement(String prefix, ExecutableElement element, Stack<TypeElement> seen) {
+	private void processExecutableElement(String prefix, ExecutableElement element, Deque<TypeElement> seen) {
 		if ((!element.getModifiers().contains(Modifier.PRIVATE))
 				&& (TypeKind.VOID != element.getReturnType().getKind())) {
 			Element returns = this.processingEnv.getTypeUtils().asElement(element.getReturnType());
@@ -254,7 +253,7 @@ public class ConfigurationMetadataAnnotationProcessor extends AbstractProcessor 
 	}
 
 	private void processTypeElement(String prefix, TypeElement element, ExecutableElement source,
-			Stack<TypeElement> seen) {
+			Deque<TypeElement> seen) {
 		if (!seen.contains(element)) {
 			seen.push(element);
 			new PropertyDescriptorResolver(this.metadataEnv).resolve(element, source).forEach((descriptor) -> {
@@ -290,15 +289,26 @@ public class ConfigurationMetadataAnnotationProcessor extends AbstractProcessor 
 			return; // Can't process that endpoint
 		}
 		String endpointKey = ItemMetadata.newItemMetadataPrefix("management.endpoint.", endpointId);
-		Boolean enabledByDefault = (Boolean) elementValues.get("enableByDefault");
+		boolean enabledByDefault = (boolean) elementValues.getOrDefault("enableByDefault", true);
 		String type = this.metadataEnv.getTypeUtils().getQualifiedName(element);
-		this.metadataCollector.add(ItemMetadata.newGroup(endpointKey, type, type, null));
-		this.metadataCollector.add(ItemMetadata.newProperty(endpointKey, "enabled", Boolean.class.getName(), type, null,
-				String.format("Whether to enable the %s endpoint.", endpointId),
-				(enabledByDefault != null) ? enabledByDefault : true, null));
+		this.metadataCollector.addIfAbsent(ItemMetadata.newGroup(endpointKey, type, type, null));
+		this.metadataCollector.add(
+				ItemMetadata.newProperty(endpointKey, "enabled", Boolean.class.getName(), type, null,
+						"Whether to enable the %s endpoint.".formatted(endpointId), enabledByDefault, null),
+				(existing) -> checkEnabledValueMatchesExisting(existing, enabledByDefault, type));
 		if (hasMainReadOperation(element)) {
-			this.metadataCollector.add(ItemMetadata.newProperty(endpointKey, "cache.time-to-live",
+			this.metadataCollector.addIfAbsent(ItemMetadata.newProperty(endpointKey, "cache.time-to-live",
 					Duration.class.getName(), type, null, "Maximum time that a response can be cached.", "0ms", null));
+		}
+	}
+
+	private void checkEnabledValueMatchesExisting(ItemMetadata existing, boolean enabledByDefault, String sourceType) {
+		boolean existingDefaultValue = (boolean) existing.getDefaultValue();
+		if (enabledByDefault != existingDefaultValue) {
+			throw new IllegalStateException(
+					"Existing property '%s' from type %s has a conflicting value. Existing value: %b, new value from type %s: %b"
+						.formatted(existing.getName(), existing.getSourceType(), existingDefaultValue, sourceType,
+								enabledByDefault));
 		}
 	}
 
@@ -322,16 +332,11 @@ public class ConfigurationMetadataAnnotationProcessor extends AbstractProcessor 
 	}
 
 	private String getPrefix(AnnotationMirror annotation) {
-		Map<String, Object> elementValues = this.metadataEnv.getAnnotationElementValues(annotation);
-		Object prefix = elementValues.get("prefix");
-		if (prefix != null && !"".equals(prefix)) {
-			return (String) prefix;
+		String prefix = this.metadataEnv.getAnnotationElementStringValue(annotation, "prefix");
+		if (prefix != null) {
+			return prefix;
 		}
-		Object value = elementValues.get("value");
-		if (value != null && !"".equals(value)) {
-			return (String) value;
-		}
-		return null;
+		return this.metadataEnv.getAnnotationElementStringValue(annotation, "value");
 	}
 
 	protected ConfigurationMetadata writeMetadata() throws Exception {

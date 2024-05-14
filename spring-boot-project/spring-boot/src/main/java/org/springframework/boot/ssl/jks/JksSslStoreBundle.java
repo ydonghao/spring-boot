@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2023 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,16 +18,17 @@ package org.springframework.boot.ssl.jks;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.URL;
 import java.security.KeyStore;
 import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
 import java.security.NoSuchProviderException;
 import java.security.cert.CertificateException;
 
+import org.springframework.boot.io.ApplicationResourceLoader;
 import org.springframework.boot.ssl.SslStoreBundle;
+import org.springframework.core.io.Resource;
+import org.springframework.core.style.ToStringCreator;
 import org.springframework.util.Assert;
-import org.springframework.util.ResourceUtils;
 import org.springframework.util.StringUtils;
 
 /**
@@ -35,13 +36,16 @@ import org.springframework.util.StringUtils;
  *
  * @author Scott Frederick
  * @author Phillip Webb
+ * @author Moritz Halbritter
  * @since 3.1.0
  */
 public class JksSslStoreBundle implements SslStoreBundle {
 
 	private final JksSslStoreDetails keyStoreDetails;
 
-	private final JksSslStoreDetails trustStoreDetails;
+	private final KeyStore keyStore;
+
+	private final KeyStore trustStore;
 
 	/**
 	 * Create a new {@link JksSslStoreBundle} instance.
@@ -50,12 +54,13 @@ public class JksSslStoreBundle implements SslStoreBundle {
 	 */
 	public JksSslStoreBundle(JksSslStoreDetails keyStoreDetails, JksSslStoreDetails trustStoreDetails) {
 		this.keyStoreDetails = keyStoreDetails;
-		this.trustStoreDetails = trustStoreDetails;
+		this.keyStore = createKeyStore("key", this.keyStoreDetails);
+		this.trustStore = createKeyStore("trust", trustStoreDetails);
 	}
 
 	@Override
 	public KeyStore getKeyStore() {
-		return createKeyStore("key", this.keyStoreDetails);
+		return this.keyStore;
 	}
 
 	@Override
@@ -65,7 +70,7 @@ public class JksSslStoreBundle implements SslStoreBundle {
 
 	@Override
 	public KeyStore getTrustStore() {
-		return createKeyStore("trust", this.trustStoreDetails);
+		return this.trustStore;
 	}
 
 	private KeyStore createKeyStore(String name, JksSslStoreDetails details) {
@@ -109,14 +114,24 @@ public class JksSslStoreBundle implements SslStoreBundle {
 	private void loadKeyStore(KeyStore store, String location, char[] password) {
 		Assert.state(StringUtils.hasText(location), () -> "Location must not be empty or null");
 		try {
-			URL url = ResourceUtils.getURL(location);
-			try (InputStream stream = url.openStream()) {
+			Resource resource = new ApplicationResourceLoader().getResource(location);
+			try (InputStream stream = resource.getInputStream()) {
 				store.load(stream, password);
 			}
 		}
 		catch (Exception ex) {
 			throw new IllegalStateException("Could not load store from '" + location + "'", ex);
 		}
+	}
+
+	@Override
+	public String toString() {
+		ToStringCreator creator = new ToStringCreator(this);
+		creator.append("keyStore.type", (this.keyStore != null) ? this.keyStore.getType() : "none");
+		String keyStorePassword = getKeyStorePassword();
+		creator.append("keyStorePassword", (keyStorePassword != null) ? "******" : null);
+		creator.append("trustStore.type", (this.trustStore != null) ? this.trustStore.getType() : "none");
+		return creator.toString();
 	}
 
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2023 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,7 +22,7 @@ import java.util.Arrays;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
- * {@link ConfigurationProperties properties} for Spring GraphQL.
+ * {@link ConfigurationProperties Properties} for Spring GraphQL.
  *
  * @author Brian Clozel
  * @since 2.7.0
@@ -79,6 +79,8 @@ public class GraphQlProperties {
 		 */
 		private String[] fileExtensions = new String[] { ".graphqls", ".gqls" };
 
+		private final Inspection inspection = new Inspection();
+
 		private final Introspection introspection = new Introspection();
 
 		private final Printer printer = new Printer();
@@ -105,12 +107,34 @@ public class GraphQlProperties {
 				.toArray(String[]::new);
 		}
 
+		public Inspection getInspection() {
+			return this.inspection;
+		}
+
 		public Introspection getIntrospection() {
 			return this.introspection;
 		}
 
 		public Printer getPrinter() {
 			return this.printer;
+		}
+
+		public static class Inspection {
+
+			/**
+			 * Whether schema should be compared to the application to detect missing
+			 * mappings.
+			 */
+			private boolean enabled = true;
+
+			public boolean isEnabled() {
+				return this.enabled;
+			}
+
+			public void setEnabled(boolean enabled) {
+				this.enabled = enabled;
+			}
+
 		}
 
 		public static class Introspection {
@@ -193,6 +217,11 @@ public class GraphQlProperties {
 		 */
 		private Duration connectionInitTimeout = Duration.ofSeconds(60);
 
+		/**
+		 * Maximum idle period before a server keep-alive ping is sent to client.
+		 */
+		private Duration keepAlive = null;
+
 		public String getPath() {
 			return this.path;
 		}
@@ -207,6 +236,14 @@ public class GraphQlProperties {
 
 		public void setConnectionInitTimeout(Duration connectionInitTimeout) {
 			this.connectionInitTimeout = connectionInitTimeout;
+		}
+
+		public Duration getKeepAlive() {
+			return this.keepAlive;
+		}
+
+		public void setKeepAlive(Duration keepAlive) {
+			this.keepAlive = keepAlive;
 		}
 
 	}

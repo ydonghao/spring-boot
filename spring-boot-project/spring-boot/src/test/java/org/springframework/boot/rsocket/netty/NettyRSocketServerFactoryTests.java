@@ -18,6 +18,7 @@ package org.springframework.boot.rsocket.netty;
 
 import java.net.InetSocketAddress;
 import java.nio.channels.ClosedChannelException;
+import java.time.Duration;
 import java.util.Arrays;
 import java.util.concurrent.Callable;
 
@@ -55,7 +56,7 @@ import org.springframework.boot.web.server.Ssl;
 import org.springframework.core.codec.CharSequenceEncoder;
 import org.springframework.core.codec.StringDecoder;
 import org.springframework.core.io.buffer.NettyDataBufferFactory;
-import org.springframework.http.client.reactive.ReactorResourceFactory;
+import org.springframework.http.client.ReactorResourceFactory;
 import org.springframework.messaging.rsocket.RSocketRequester;
 import org.springframework.messaging.rsocket.RSocketStrategies;
 
@@ -245,7 +246,7 @@ class NettyRSocketServerFactoryTests {
 	private void checkEchoRequest() {
 		String payload = "test payload";
 		Mono<String> response = this.requester.route("test").data(payload).retrieveMono(String.class);
-		StepVerifier.create(response).expectNext(payload).verifyComplete();
+		StepVerifier.create(response).expectNext(payload).expectComplete().verify(Duration.ofSeconds(30));
 	}
 
 	private void testBasicSslWithKeyStore(String keyStore, String keyPassword, Transport transport) {

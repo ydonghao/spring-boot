@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2023 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,20 +18,25 @@ package org.springframework.boot.autoconfigure.jms;
 
 import java.io.IOException;
 
+import io.micrometer.observation.ObservationRegistry;
 import jakarta.jms.ConnectionFactory;
 import jakarta.jms.ExceptionListener;
 import jakarta.jms.Session;
 import org.apache.activemq.artemis.jms.client.ActiveMQConnectionFactory;
 import org.junit.jupiter.api.Test;
 
+import org.springframework.aot.hint.predicate.RuntimeHintsPredicates;
+import org.springframework.aot.test.generate.TestGenerationContext;
 import org.springframework.beans.factory.config.BeanPostProcessor;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.autoconfigure.jms.artemis.ArtemisAutoConfiguration;
 import org.springframework.boot.test.context.assertj.AssertableApplicationContext;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
+import org.springframework.context.aot.ApplicationContextAotGenerator;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.jms.annotation.EnableJms;
 import org.springframework.jms.config.DefaultJmsListenerContainerFactory;
@@ -57,6 +62,8 @@ import static org.mockito.Mockito.mock;
  * @author Stephane Nicoll
  * @author Aurélien Leboulanger
  * @author Eddú Meléndez
+ * @author Vedran Pavic
+ * @author Lasse Wulff
  */
 class JmsAutoConfigurationTests {
 
@@ -142,9 +149,11 @@ class JmsAutoConfigurationTests {
 	@Test
 	void testJmsListenerContainerFactoryWithCustomSettings() {
 		this.contextRunner.withUserConfiguration(EnableJmsConfiguration.class)
-			.withPropertyValues("spring.jms.listener.autoStartup=false", "spring.jms.listener.acknowledgeMode=client",
-					"spring.jms.listener.concurrency=2", "spring.jms.listener.receiveTimeout=2s",
-					"spring.jms.listener.maxConcurrency=10")
+			.withPropertyValues("spring.jms.listener.autoStartup=false",
+					"spring.jms.listener.session.acknowledgeMode=client",
+					"spring.jms.listener.session.transacted=false", "spring.jms.listener.minConcurrency=2",
+					"spring.jms.listener.receiveTimeout=2s", "spring.jms.listener.maxConcurrency=10",
+					"spring.jms.subscription-durable=true", "spring.jms.client-id=exampleId")
 			.run(this::testJmsListenerContainerFactoryWithCustomSettings);
 	}
 
@@ -152,9 +161,22 @@ class JmsAutoConfigurationTests {
 		DefaultMessageListenerContainer container = getContainer(loaded, "jmsListenerContainerFactory");
 		assertThat(container.isAutoStartup()).isFalse();
 		assertThat(container.getSessionAcknowledgeMode()).isEqualTo(Session.CLIENT_ACKNOWLEDGE);
+		assertThat(container.isSessionTransacted()).isFalse();
 		assertThat(container.getConcurrentConsumers()).isEqualTo(2);
 		assertThat(container.getMaxConcurrentConsumers()).isEqualTo(10);
 		assertThat(container).hasFieldOrPropertyWithValue("receiveTimeout", 2000L);
+		assertThat(container.isSubscriptionDurable()).isTrue();
+		assertThat(container.getClientId()).isEqualTo("exampleId");
+	}
+
+	@Test
+	void testJmsListenerContainerFactoryWithNonStandardAcknowledgeMode() {
+		this.contextRunner.withUserConfiguration(EnableJmsConfiguration.class)
+			.withPropertyValues("spring.jms.listener.session.acknowledge-mode=9")
+			.run((context) -> {
+				DefaultMessageListenerContainer container = getContainer(context, "jmsListenerContainerFactory");
+				assertThat(container.getSessionAcknowledgeMode()).isEqualTo(9);
+			});
 	}
 
 	@Test
@@ -180,6 +202,18 @@ class JmsAutoConfigurationTests {
 	}
 
 	@Test
+	void testDefaultContainerFactoryWithJtaTransactionManagerAndSessionTransactedEnabled() {
+		this.contextRunner.withUserConfiguration(TestConfiguration7.class, EnableJmsConfiguration.class)
+			.withPropertyValues("spring.jms.listener.session.transacted=true")
+			.run((context) -> {
+				DefaultMessageListenerContainer container = getContainer(context, "jmsListenerContainerFactory");
+				assertThat(container.isSessionTransacted()).isTrue();
+				assertThat(container).hasFieldOrPropertyWithValue("transactionManager",
+						context.getBean(JtaTransactionManager.class));
+			});
+	}
+
+	@Test
 	void testDefaultContainerFactoryNonJtaTransactionManager() {
 		this.contextRunner.withUserConfiguration(TestConfiguration8.class, EnableJmsConfiguration.class)
 			.run((context) -> {
@@ -199,6 +233,17 @@ class JmsAutoConfigurationTests {
 	}
 
 	@Test
+	void testDefaultContainerFactoryNoTransactionManagerAndSessionTransactedDisabled() {
+		this.contextRunner.withUserConfiguration(EnableJmsConfiguration.class)
+			.withPropertyValues("spring.jms.listener.session.transacted=false")
+			.run((context) -> {
+				DefaultMessageListenerContainer container = getContainer(context, "jmsListenerContainerFactory");
+				assertThat(container.isSessionTransacted()).isFalse();
+				assertThat(container).hasFieldOrPropertyWithValue("transactionManager", null);
+			});
+	}
+
+	@Test
 	void testDefaultContainerFactoryWithMessageConverters() {
 		this.contextRunner.withUserConfiguration(MessageConvertersConfiguration.class, EnableJmsConfiguration.class)
 			.run((context) -> {
@@ -215,6 +260,17 @@ class JmsAutoConfigurationTests {
 			.run((context) -> {
 				DefaultMessageListenerContainer container = getContainer(context, "jmsListenerContainerFactory");
 				assertThat(container.getExceptionListener()).isSameAs(exceptionListener);
+			});
+	}
+
+	@Test
+	void testDefaultContainerFactoryWithObservationRegistry() {
+		ObservationRegistry observationRegistry = mock(ObservationRegistry.class);
+		this.contextRunner.withUserConfiguration(EnableJmsConfiguration.class)
+			.withBean(ObservationRegistry.class, () -> observationRegistry)
+			.run((context) -> {
+				DefaultMessageListenerContainer container = getContainer(context, "jmsListenerContainerFactory");
+				assertThat(container.getObservationRegistry()).isSameAs(observationRegistry);
 			});
 	}
 
@@ -251,9 +307,21 @@ class JmsAutoConfigurationTests {
 	}
 
 	@Test
+	void testJmsTemplateWithObservationRegistry() {
+		ObservationRegistry observationRegistry = mock(ObservationRegistry.class);
+		this.contextRunner.withUserConfiguration(EnableJmsConfiguration.class)
+			.withBean(ObservationRegistry.class, () -> observationRegistry)
+			.run((context) -> {
+				JmsTemplate jmsTemplate = context.getBean(JmsTemplate.class);
+				assertThat(jmsTemplate).extracting("observationRegistry").isSameAs(observationRegistry);
+			});
+	}
+
+	@Test
 	void testJmsTemplateFullCustomization() {
 		this.contextRunner.withUserConfiguration(MessageConvertersConfiguration.class)
-			.withPropertyValues("spring.jms.template.default-destination=testQueue",
+			.withPropertyValues("spring.jms.template.session.acknowledge-mode=client",
+					"spring.jms.template.session.transacted=true", "spring.jms.template.default-destination=testQueue",
 					"spring.jms.template.delivery-delay=500", "spring.jms.template.delivery-mode=non-persistent",
 					"spring.jms.template.priority=6", "spring.jms.template.time-to-live=6000",
 					"spring.jms.template.receive-timeout=2000")
@@ -261,6 +329,8 @@ class JmsAutoConfigurationTests {
 				JmsTemplate jmsTemplate = context.getBean(JmsTemplate.class);
 				assertThat(jmsTemplate.getMessageConverter()).isSameAs(context.getBean("myMessageConverter"));
 				assertThat(jmsTemplate.isPubSubDomain()).isFalse();
+				assertThat(jmsTemplate.getSessionAcknowledgeMode()).isEqualTo(Session.CLIENT_ACKNOWLEDGE);
+				assertThat(jmsTemplate.isSessionTransacted()).isTrue();
 				assertThat(jmsTemplate.getDefaultDestinationName()).isEqualTo("testQueue");
 				assertThat(jmsTemplate.getDeliveryDelay()).isEqualTo(500);
 				assertThat(jmsTemplate.getDeliveryMode()).isOne();
@@ -268,6 +338,16 @@ class JmsAutoConfigurationTests {
 				assertThat(jmsTemplate.getTimeToLive()).isEqualTo(6000);
 				assertThat(jmsTemplate.isExplicitQosEnabled()).isTrue();
 				assertThat(jmsTemplate.getReceiveTimeout()).isEqualTo(2000);
+			});
+	}
+
+	@Test
+	void testJmsTemplateWithNonStandardAcknowledgeMode() {
+		this.contextRunner.withUserConfiguration(EnableJmsConfiguration.class)
+			.withPropertyValues("spring.jms.template.session.acknowledge-mode=7")
+			.run((context) -> {
+				JmsTemplate jmsTemplate = context.getBean(JmsTemplate.class);
+				assertThat(jmsTemplate.getSessionAcknowledgeMode()).isEqualTo(7);
 			});
 	}
 
@@ -336,6 +416,17 @@ class JmsAutoConfigurationTests {
 			.run((context) -> assertThat(context)
 				.hasBean(JmsListenerConfigUtils.JMS_LISTENER_ANNOTATION_PROCESSOR_BEAN_NAME)
 				.hasBean(JmsListenerConfigUtils.JMS_LISTENER_ENDPOINT_REGISTRY_BEAN_NAME));
+	}
+
+	@Test
+	void runtimeHintsAreRegisteredForBindingOfAcknowledgeMode() {
+		try (AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext()) {
+			context.register(ArtemisAutoConfiguration.class, JmsAutoConfiguration.class);
+			TestGenerationContext generationContext = new TestGenerationContext();
+			new ApplicationContextAotGenerator().processAheadOfTime(context, generationContext);
+			assertThat(RuntimeHintsPredicates.reflection().onMethod(AcknowledgeMode.class, "of").invoke())
+				.accepts(generationContext.getRuntimeHints());
+		}
 	}
 
 	@Configuration(proxyBeanMethods = false)

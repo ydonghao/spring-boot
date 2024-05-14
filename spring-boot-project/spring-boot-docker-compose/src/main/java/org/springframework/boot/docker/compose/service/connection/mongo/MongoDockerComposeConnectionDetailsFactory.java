@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2023 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -30,13 +30,16 @@ import org.springframework.boot.docker.compose.service.connection.DockerComposeC
  * @author Moritz Halbritter
  * @author Andy Wilkinson
  * @author Phillip Webb
+ * @author Scott Frederick
  */
 class MongoDockerComposeConnectionDetailsFactory extends DockerComposeConnectionDetailsFactory<MongoConnectionDetails> {
+
+	private static final String[] MONGODB_CONTAINER_NAMES = { "mongo", "bitnami/mongodb" };
 
 	private static final int MONGODB_PORT = 27017;
 
 	protected MongoDockerComposeConnectionDetailsFactory() {
-		super("mongo", "com.mongodb.ConnectionString");
+		super(MONGODB_CONTAINER_NAMES, "com.mongodb.ConnectionString");
 	}
 
 	@Override
@@ -73,6 +76,9 @@ class MongoDockerComposeConnectionDetailsFactory extends DockerComposeConnection
 			builder.append(service.ports().get(MONGODB_PORT));
 			builder.append("/");
 			builder.append((environment.getDatabase() != null) ? environment.getDatabase() : "test");
+			if (environment.getUsername() != null) {
+				builder.append("?authSource=admin");
+			}
 			return new ConnectionString(builder.toString());
 		}
 

@@ -19,6 +19,7 @@ package org.springframework.boot.context.properties.bind;
 import java.beans.Introspector;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.Arrays;
@@ -382,9 +383,18 @@ class JavaBeanBinder implements DataObjectBinder {
 					return this.getter.invoke(instance.get());
 				}
 				catch (Exception ex) {
+					if (isUninitializedKotlinProperty(ex)) {
+						return null;
+					}
 					throw new IllegalStateException("Unable to get value for property " + this.name, ex);
 				}
 			};
+		}
+
+		private boolean isUninitializedKotlinProperty(Exception ex) {
+			return (ex instanceof InvocationTargetException invocationTargetException)
+					&& "kotlin.UninitializedPropertyAccessException"
+						.equals(invocationTargetException.getTargetException().getClass().getName());
 		}
 
 		boolean isSettable() {

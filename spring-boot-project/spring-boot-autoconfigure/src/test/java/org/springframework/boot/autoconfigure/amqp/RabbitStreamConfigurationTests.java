@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2023 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -54,6 +54,7 @@ import static org.mockito.Mockito.mock;
  * @author Gary Russell
  * @author Andy Wilkinson
  * @author Eddú Meléndez
+ * @author Moritz Halbritter
  */
 class RabbitStreamConfigurationTests {
 
@@ -85,6 +86,16 @@ class RabbitStreamConfigurationTests {
 					"spring.rabbitmq.listener.stream.native-listener:true")
 			.run((context) -> assertThat(context.getBean(StreamRabbitListenerContainerFactory.class))
 				.extracting("nativeListener", InstanceOfAssertFactories.BOOLEAN)
+				.isTrue());
+	}
+
+	@Test
+	void shouldConfigureObservations() {
+		this.contextRunner
+			.withPropertyValues("spring.rabbitmq.listener.type:stream",
+					"spring.rabbitmq.listener.stream.observation-enabled:true")
+			.run((context) -> assertThat(context.getBean(StreamRabbitListenerContainerFactory.class))
+				.extracting("observationEnabled", InstanceOfAssertFactories.BOOLEAN)
 				.isTrue());
 	}
 
@@ -141,6 +152,24 @@ class RabbitStreamConfigurationTests {
 		properties.getStream().setHost("stream.rabbit.example.com");
 		RabbitStreamConfiguration.configure(builder, properties);
 		then(builder).should().host("stream.rabbit.example.com");
+	}
+
+	@Test
+	void whenStreamVirtualHostIsSetThenEnvironmentUsesCustomVirtualHost() {
+		EnvironmentBuilder builder = mock(EnvironmentBuilder.class);
+		RabbitProperties properties = new RabbitProperties();
+		properties.getStream().setVirtualHost("stream-virtual-host");
+		RabbitStreamConfiguration.configure(builder, properties);
+		then(builder).should().virtualHost("stream-virtual-host");
+	}
+
+	@Test
+	void whenStreamVirtualHostIsNotSetButDefaultVirtualHostIsSetThenEnvironmentUsesDefaultVirtualHost() {
+		EnvironmentBuilder builder = mock(EnvironmentBuilder.class);
+		RabbitProperties properties = new RabbitProperties();
+		properties.setVirtualHost("default-virtual-host");
+		RabbitStreamConfiguration.configure(builder, properties);
+		then(builder).should().virtualHost("default-virtual-host");
 	}
 
 	@Test

@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2023 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -53,17 +53,22 @@ class MapBinder extends AggregateBinder<Map<Object, Object>> {
 	@Override
 	protected Object bindAggregate(ConfigurationPropertyName name, Bindable<?> target,
 			AggregateElementBinder elementBinder) {
-		Map<Object, Object> map = CollectionFactory
-			.createMap((target.getValue() != null) ? Map.class : target.getType().resolve(Object.class), 0);
 		Bindable<?> resolvedTarget = resolveTarget(target);
 		boolean hasDescendants = hasDescendants(name);
+		if (!hasDescendants && !ConfigurationPropertyName.EMPTY.equals(name)) {
+			for (ConfigurationPropertySource source : getContext().getSources()) {
+				ConfigurationProperty property = source.getConfigurationProperty(name);
+				if (property != null) {
+					getContext().setConfigurationProperty(property);
+					Object result = getContext().getPlaceholdersResolver().resolvePlaceholders(property.getValue());
+					return getContext().getConverter().convert(result, target);
+				}
+			}
+		}
+		Map<Object, Object> map = CollectionFactory
+			.createMap((target.getValue() != null) ? Map.class : target.getType().resolve(Object.class), 0);
 		for (ConfigurationPropertySource source : getContext().getSources()) {
 			if (!ConfigurationPropertyName.EMPTY.equals(name)) {
-				ConfigurationProperty property = source.getConfigurationProperty(name);
-				if (property != null && !hasDescendants) {
-					getContext().setConfigurationProperty(property);
-					return getContext().getConverter().convert(property.getValue(), target);
-				}
 				source = source.filter(name::isAncestorOf);
 			}
 			new EntryBinder(name, resolvedTarget, elementBinder).bindEntries(source, map);
@@ -211,7 +216,7 @@ class MapBinder extends AggregateBinder<Map<Object, Object>> {
 		private String getKeyName(ConfigurationPropertyName name) {
 			StringBuilder result = new StringBuilder();
 			for (int i = this.root.getNumberOfElements(); i < name.getNumberOfElements(); i++) {
-				if (result.length() != 0) {
+				if (!result.isEmpty()) {
 					result.append('.');
 				}
 				result.append(name.getElement(i, Form.ORIGINAL));

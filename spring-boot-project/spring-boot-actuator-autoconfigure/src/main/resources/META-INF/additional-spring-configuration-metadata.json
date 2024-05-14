@@ -31,6 +31,14 @@
       "defaultValue": true
     },
     {
+      "name": "management.endpoint.configprops.show-values",
+      "defaultValue": "never"
+    },
+    {
+      "name": "management.endpoint.env.show-values",
+      "defaultValue": "never"
+    },
+    {
       "name": "management.endpoint.health.probes.add-additional-paths",
       "type": "java.lang.Boolean",
       "description": "Whether to make the liveness and readiness health groups available on the main server port.",
@@ -60,6 +68,10 @@
       "type": "java.lang.Boolean",
       "description": "Whether to validate health group membership on startup. Validation fails if a group includes or excludes a health contributor that does not exist.",
       "defaultValue": true
+    },
+    {
+      "name": "management.endpoint.quartz.show-values",
+      "defaultValue": "never"
     },
     {
       "name": "management.endpoints.enabled-by-default",
@@ -307,6 +319,12 @@
       "name": "management.info.os.enabled",
       "type": "java.lang.Boolean",
       "description": "Whether to enable Operating System info.",
+      "defaultValue": false
+    },
+    {
+      "name": "management.info.process.enabled",
+      "type": "java.lang.Boolean",
+      "description": "Whether to enable process info.",
       "defaultValue": false
     },
     {
@@ -1606,6 +1624,13 @@
       }
     },
     {
+      "name": "management.metrics.export.signalfx.published-histogram-type",
+      "deprecation": {
+        "level": "error",
+        "replacement": "management.signalfx.metrics.export.published-histogram-type"
+      }
+    },
+    {
       "name": "management.metrics.export.signalfx.read-timeout",
       "type": "java.time.Duration",
       "deprecation": {
@@ -1981,10 +2006,18 @@
       }
     },
     {
+      "name": "management.metrics.web.client.request.metric-name",
+      "type": "java.lang.String",
+      "deprecation": {
+        "replacement": "management.observations.http.client.requests.name",
+        "level": "error"
+      }
+    },
+    {
       "name": "management.metrics.web.client.requests-metric-name",
       "type": "java.lang.String",
       "deprecation": {
-        "replacement": "management.metrics.web.client.request.metric-name",
+        "replacement": "management.observations.http.client.requests.name",
         "level": "error"
       }
     },
@@ -2031,12 +2064,30 @@
       }
     },
     {
+      "name": "management.metrics.web.server.request.metric-name",
+      "type": "java.lang.String",
+      "deprecation": {
+        "replacement": "management.observations.http.server.requests.name",
+        "level": "error"
+      }
+    },
+    {
       "name": "management.metrics.web.server.requests-metric-name",
       "type": "java.lang.String",
       "deprecation": {
-        "replacement": "management.metrics.web.server.request.metric-name",
+        "replacement": "management.observations.http.server.requests.name",
         "level": "error"
       }
+    },
+    {
+      "name": "management.observations.annotations.enabled",
+      "type": "java.lang.Boolean",
+      "description": "Whether auto-configuration of Micrometer annotations is enabled.",
+      "defaultValue": false
+    },
+    {
+      "name": "management.otlp.metrics.export.base-time-unit",
+      "defaultValue": "milliseconds"
     },
     {
       "name": "management.otlp.tracing.compression",
@@ -2123,6 +2174,10 @@
       "defaultValue": "TLS"
     },
     {
+      "name": "management.server.ssl.server-name-bundles",
+      "description": "Mapping of host names to SSL bundles for SNI configuration."
+    },
+    {
       "name": "management.server.ssl.trust-certificate",
       "description": "Path to a PEM-encoded SSL certificate authority file."
     },
@@ -2145,6 +2200,10 @@
     {
       "name": "management.server.ssl.trust-store-type",
       "description": "Type of the trust store."
+    },
+    {
+      "name": "management.signalfx.metrics.export.published-histogram-type",
+      "defaultValue": "default"
     },
     {
       "name": "management.simple.metrics.export.mode",
@@ -2180,8 +2239,38 @@
       }
     },
     {
-      "name": "management.tracing.propagation.type",
-      "defaultValue": "W3C"
+      "name": "management.tracing.enabled",
+      "type": "java.lang.Boolean",
+      "description": "Whether auto-configuration of tracing is enabled to export and propagate traces.",
+      "defaultValue": true
+    },
+    {
+      "name": "management.tracing.propagation.consume",
+      "defaultValue": [
+        "W3C",
+        "B3",
+        "B3_MULTI"
+      ]
+    },
+    {
+      "name": "management.tracing.propagation.produce",
+      "defaultValue": [
+        "W3C"
+      ]
+    },
+    {
+      "name": "management.zipkin.tracing.encoding",
+      "defaultValue": [
+        "JSON"
+      ]
+    },
+    {
+      "name": "micrometer.observations.annotations.enabled",
+      "type": "java.lang.Boolean",
+      "deprecation": {
+        "level": "error",
+        "replacement": "management.observations.annotations.enabled"
+      }
     }
   ],
   "hints": [

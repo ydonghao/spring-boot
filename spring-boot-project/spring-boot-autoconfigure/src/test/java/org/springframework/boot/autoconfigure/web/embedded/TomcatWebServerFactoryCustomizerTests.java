@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2023 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,10 +17,12 @@
 package org.springframework.boot.autoconfigure.web.embedded;
 
 import java.util.Locale;
+import java.util.concurrent.Executor;
 import java.util.function.Consumer;
 
 import org.apache.catalina.Context;
 import org.apache.catalina.Valve;
+import org.apache.catalina.core.StandardThreadExecutor;
 import org.apache.catalina.startup.Tomcat;
 import org.apache.catalina.valves.AccessLogValve;
 import org.apache.catalina.valves.ErrorReportValve;
@@ -58,6 +60,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * @author Rafiullah Hamedy
  * @author Victor Mandujano
  * @author Parviz Rozikov
+ * @author Moritz Halbritter
  */
 class TomcatWebServerFactoryCustomizerTests {
 
@@ -174,47 +177,6 @@ class TomcatWebServerFactoryCustomizerTests {
 		bind("server.tomcat.max-http-form-post-size=10000");
 		customizeAndRunServer(
 				(server) -> assertThat(server.getTomcat().getConnector().getMaxPostSize()).isEqualTo(10000));
-	}
-
-	@Test
-	void customMaxHttpHeaderSize() {
-		bind("server.max-http-header-size=1KB");
-		customizeAndRunServer((server) -> assertThat(
-				((AbstractHttp11Protocol<?>) server.getTomcat().getConnector().getProtocolHandler())
-					.getMaxHttpRequestHeaderSize())
-			.isEqualTo(DataSize.ofKilobytes(1).toBytes()));
-	}
-
-	@Test
-	void customMaxHttpHeaderSizeWithHttp2() {
-		bind("server.max-http-header-size=1KB", "server.http2.enabled=true");
-		customizeAndRunServer((server) -> {
-			AbstractHttp11Protocol<?> protocolHandler = (AbstractHttp11Protocol<?>) server.getTomcat()
-				.getConnector()
-				.getProtocolHandler();
-			long expectedSize = DataSize.ofKilobytes(1).toBytes();
-			assertThat(protocolHandler.getMaxHttpRequestHeaderSize()).isEqualTo(expectedSize);
-			assertThat(((Http2Protocol) protocolHandler.getUpgradeProtocol("h2c")).getMaxHeaderSize())
-				.isEqualTo(expectedSize);
-		});
-	}
-
-	@Test
-	void customMaxHttpHeaderSizeIgnoredIfNegative() {
-		bind("server.max-http-header-size=-1");
-		customizeAndRunServer((server) -> assertThat(
-				((AbstractHttp11Protocol<?>) server.getTomcat().getConnector().getProtocolHandler())
-					.getMaxHttpRequestHeaderSize())
-			.isEqualTo(DataSize.ofKilobytes(8).toBytes()));
-	}
-
-	@Test
-	void customMaxHttpHeaderSizeIgnoredIfZero() {
-		bind("server.max-http-header-size=0");
-		customizeAndRunServer((server) -> assertThat(
-				((AbstractHttp11Protocol<?>) server.getTomcat().getConnector().getProtocolHandler())
-					.getMaxHttpRequestHeaderSize())
-			.isEqualTo(DataSize.ofKilobytes(8).toBytes()));
 	}
 
 	@Test
@@ -437,15 +399,6 @@ class TomcatWebServerFactoryCustomizerTests {
 	}
 
 	@Test
-	void testCustomizeRejectIllegalHeader() {
-		bind("server.tomcat.reject-illegal-header=false");
-		customizeAndRunServer((server) -> assertThat(
-				((AbstractHttp11Protocol<?>) server.getTomcat().getConnector().getProtocolHandler())
-					.getRejectIllegalHeader())
-			.isFalse());
-	}
-
-	@Test
 	void errorReportValveIsConfiguredToNotReportStackTraces() {
 		TomcatWebServer server = customizeAndGetServer();
 		Valve[] valves = server.getTomcat().getHost().getPipeline().getValves();
@@ -612,6 +565,20 @@ class TomcatWebServerFactoryCustomizerTests {
 		WebServer server = factory.getWebServer();
 		server.start();
 		server.stop();
+	}
+
+	@Test
+	void configureExecutor() {
+		bind("server.tomcat.threads.max=10", "server.tomcat.threads.min-spare=2",
+				"server.tomcat.threads.max-queue-capacity=20");
+		customizeAndRunServer((server) -> {
+			Executor executor = server.getTomcat().getConnector().getProtocolHandler().getExecutor();
+			assertThat(executor).isInstanceOf(StandardThreadExecutor.class);
+			StandardThreadExecutor standardThreadExecutor = (StandardThreadExecutor) executor;
+			assertThat(standardThreadExecutor.getMaxThreads()).isEqualTo(10);
+			assertThat(standardThreadExecutor.getMinSpareThreads()).isEqualTo(2);
+			assertThat(standardThreadExecutor.getMaxQueueSize()).isEqualTo(20);
+		});
 	}
 
 	private void bind(String... inlinedProperties) {

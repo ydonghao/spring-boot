@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2023 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@
 
 package org.springframework.boot.logging.logback;
 
+import java.io.PrintStream;
 import java.net.URL;
 import java.security.CodeSource;
 import java.security.ProtectionDomain;
@@ -30,6 +31,7 @@ import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.LoggerContext;
 import ch.qos.logback.classic.joran.JoranConfigurator;
 import ch.qos.logback.classic.jul.LevelChangePropagator;
+import ch.qos.logback.classic.spi.TurboFilterList;
 import ch.qos.logback.classic.turbo.TurboFilter;
 import ch.qos.logback.core.joran.spi.JoranException;
 import ch.qos.logback.core.spi.FilterReply;
@@ -37,17 +39,19 @@ import ch.qos.logback.core.status.OnConsoleStatusListener;
 import ch.qos.logback.core.status.Status;
 import ch.qos.logback.core.status.StatusUtil;
 import ch.qos.logback.core.util.StatusListenerConfigHelper;
-import ch.qos.logback.core.util.StatusPrinter;
+import ch.qos.logback.core.util.StatusPrinter2;
 import org.slf4j.ILoggerFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.Marker;
 import org.slf4j.bridge.SLF4JBridgeHandler;
+import org.slf4j.helpers.SubstituteLoggerFactory;
 
 import org.springframework.aot.AotDetector;
 import org.springframework.beans.factory.aot.BeanFactoryInitializationAotContribution;
 import org.springframework.beans.factory.aot.BeanFactoryInitializationAotProcessor;
 import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
+import org.springframework.boot.io.ApplicationResourceLoader;
 import org.springframework.boot.logging.AbstractLoggingSystem;
 import org.springframework.boot.logging.LogFile;
 import org.springframework.boot.logging.LogLevel;
@@ -60,9 +64,9 @@ import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.core.env.ConfigurableEnvironment;
 import org.springframework.core.env.Environment;
+import org.springframework.core.io.Resource;
 import org.springframework.util.Assert;
 import org.springframework.util.ClassUtils;
-import org.springframework.util.ResourceUtils;
 import org.springframework.util.StringUtils;
 
 /**
@@ -103,13 +107,15 @@ public class LogbackLoggingSystem extends AbstractLoggingSystem implements BeanF
 
 	};
 
+	private final StatusPrinter2 statusPrinter = new StatusPrinter2();
+
 	public LogbackLoggingSystem(ClassLoader classLoader) {
 		super(classLoader);
 	}
 
 	@Override
 	public LoggingSystemProperties getSystemProperties(ConfigurableEnvironment environment) {
-		return new LogbackLoggingSystemProperties(environment);
+		return new LogbackLoggingSystemProperties(environment, getDefaultValueResolver(environment), null);
 	}
 
 	@Override
@@ -186,6 +192,7 @@ public class LogbackLoggingSystem extends AbstractLoggingSystem implements BeanF
 		if (!initializeFromAotGeneratedArtifactsIfPossible(initializationContext, logFile)) {
 			super.initialize(initializationContext, configLocation, logFile);
 		}
+		loggerContext.putObject(Environment.class.getName(), initializationContext.getEnvironment());
 		loggerContext.getTurboFilterList().remove(FILTER);
 		markAsInitialized(loggerContext);
 		if (StringUtils.hasText(System.getProperty(CONFIGURATION_FILE_PROPERTY))) {
@@ -217,56 +224,69 @@ public class LogbackLoggingSystem extends AbstractLoggingSystem implements BeanF
 	protected void loadDefaults(LoggingInitializationContext initializationContext, LogFile logFile) {
 		LoggerContext context = getLoggerContext();
 		stopAndReset(context);
-		boolean debug = Boolean.getBoolean("logback.debug");
-		if (debug) {
-			StatusListenerConfigHelper.addOnConsoleListenerInstance(context, new OnConsoleStatusListener());
-		}
-		Environment environment = initializationContext.getEnvironment();
-		// Apply system properties directly in case the same JVM runs multiple apps
-		new LogbackLoggingSystemProperties(environment, context::putProperty).apply(logFile);
-		LogbackConfigurator configurator = debug ? new DebugLogbackConfigurator(context)
-				: new LogbackConfigurator(context);
-		new DefaultLogbackConfiguration(logFile).apply(configurator);
-		context.setPackagingDataEnabled(true);
+		withLoggingSuppressed(() -> {
+			boolean debug = Boolean.getBoolean("logback.debug");
+			if (debug) {
+				StatusListenerConfigHelper.addOnConsoleListenerInstance(context, new OnConsoleStatusListener());
+			}
+			Environment environment = initializationContext.getEnvironment();
+			// Apply system properties directly in case the same JVM runs multiple apps
+			new LogbackLoggingSystemProperties(environment, getDefaultValueResolver(environment), context::putProperty)
+				.apply(logFile);
+			LogbackConfigurator configurator = debug ? new DebugLogbackConfigurator(context)
+					: new LogbackConfigurator(context);
+			new DefaultLogbackConfiguration(logFile).apply(configurator);
+			context.setPackagingDataEnabled(true);
+		});
 	}
 
 	@Override
 	protected void loadConfiguration(LoggingInitializationContext initializationContext, String location,
 			LogFile logFile) {
-		if (initializationContext != null) {
-			applySystemProperties(initializationContext.getEnvironment(), logFile);
-		}
 		LoggerContext loggerContext = getLoggerContext();
 		stopAndReset(loggerContext);
-		try {
-			configureByResourceUrl(initializationContext, loggerContext, ResourceUtils.getURL(location));
-		}
-		catch (Exception ex) {
-			throw new IllegalStateException("Could not initialize Logback logging from " + location, ex);
-		}
+		withLoggingSuppressed(() -> {
+			if (initializationContext != null) {
+				applySystemProperties(initializationContext.getEnvironment(), logFile);
+			}
+			try {
+				Resource resource = new ApplicationResourceLoader().getResource(location);
+				configureByResourceUrl(initializationContext, loggerContext, resource.getURL());
+			}
+			catch (Exception ex) {
+				throw new IllegalStateException("Could not initialize Logback logging from " + location, ex);
+			}
+		});
 		reportConfigurationErrorsIfNecessary(loggerContext);
 	}
 
 	private void reportConfigurationErrorsIfNecessary(LoggerContext loggerContext) {
-		List<Status> statuses = loggerContext.getStatusManager().getCopyOfStatusList();
 		StringBuilder errors = new StringBuilder();
-		for (Status status : statuses) {
+		List<Throwable> suppressedExceptions = new ArrayList<>();
+		for (Status status : loggerContext.getStatusManager().getCopyOfStatusList()) {
 			if (status.getLevel() == Status.ERROR) {
-				errors.append((errors.length() > 0) ? String.format("%n") : "");
-				errors.append(status.toString());
+				errors.append((!errors.isEmpty()) ? String.format("%n") : "");
+				errors.append(status);
+				if (status.getThrowable() != null) {
+					suppressedExceptions.add(status.getThrowable());
+				}
 			}
 		}
-		if (errors.length() > 0) {
-			throw new IllegalStateException(String.format("Logback configuration error detected: %n%s", errors));
+		if (errors.isEmpty()) {
+			if (!StatusUtil.contextHasStatusListener(loggerContext)) {
+				this.statusPrinter.printInCaseOfErrorsOrWarnings(loggerContext);
+			}
+			return;
 		}
-		if (!StatusUtil.contextHasStatusListener(loggerContext)) {
-			StatusPrinter.printInCaseOfErrorsOrWarnings(loggerContext);
-		}
+		IllegalStateException ex = new IllegalStateException(
+				String.format("Logback configuration error detected: %n%s", errors));
+		suppressedExceptions.forEach(ex::addSuppressed);
+		throw ex;
 	}
 
 	private void configureByResourceUrl(LoggingInitializationContext initializationContext, LoggerContext loggerContext,
 			URL url) throws JoranException {
-		if (url.toString().endsWith(".xml")) {
+		if (url.getPath().endsWith(".xml")) {
 			JoranConfigurator configurator = new SpringBootJoranConfigurator(initializationContext);
 			configurator.setContext(loggerContext);
 			configurator.doConfigure(url);
@@ -377,7 +397,7 @@ public class LogbackLoggingSystem extends AbstractLoggingSystem implements BeanF
 	}
 
 	private LoggerContext getLoggerContext() {
-		ILoggerFactory factory = LoggerFactory.getILoggerFactory();
+		ILoggerFactory factory = getLoggerFactory();
 		Assert.isInstanceOf(LoggerContext.class, factory,
 				() -> String.format(
 						"LoggerFactory is not a Logback LoggerContext but Logback is on "
@@ -387,6 +407,21 @@ public class LogbackLoggingSystem extends AbstractLoggingSystem implements BeanF
 								+ "prefer-application-packages in WEB-INF/weblogic.xml",
 						factory.getClass(), getLocation(factory)));
 		return (LoggerContext) factory;
+	}
+
+	private ILoggerFactory getLoggerFactory() {
+		ILoggerFactory factory = LoggerFactory.getILoggerFactory();
+		while (factory instanceof SubstituteLoggerFactory) {
+			try {
+				Thread.sleep(50);
+			}
+			catch (InterruptedException ex) {
+				Thread.currentThread().interrupt();
+				throw new IllegalStateException("Interrupted while waiting for non-substitute logger factory", ex);
+			}
+			factory = LoggerFactory.getILoggerFactory();
+		}
+		return factory;
 	}
 
 	private Object getLocation(ILoggerFactory factory) {
@@ -416,6 +451,11 @@ public class LogbackLoggingSystem extends AbstractLoggingSystem implements BeanF
 	}
 
 	@Override
+	protected String getDefaultLogCorrelationPattern() {
+		return "%correlationId";
+	}
+
+	@Override
 	public BeanFactoryInitializationAotContribution processAheadOfTime(ConfigurableListableBeanFactory beanFactory) {
 		String key = BeanFactoryInitializationAotContribution.class.getName();
 		LoggerContext context = getLoggerContext();
@@ -423,6 +463,21 @@ public class LogbackLoggingSystem extends AbstractLoggingSystem implements BeanF
 			.getObject(key);
 		context.removeObject(key);
 		return contribution;
+	}
+
+	private void withLoggingSuppressed(Runnable action) {
+		TurboFilterList turboFilters = getLoggerContext().getTurboFilterList();
+		turboFilters.add(FILTER);
+		try {
+			action.run();
+		}
+		finally {
+			turboFilters.remove(FILTER);
+		}
+	}
+
+	void setStatusPrinterStream(PrintStream stream) {
+		this.statusPrinter.setPrintStream(stream);
 	}
 
 	/**

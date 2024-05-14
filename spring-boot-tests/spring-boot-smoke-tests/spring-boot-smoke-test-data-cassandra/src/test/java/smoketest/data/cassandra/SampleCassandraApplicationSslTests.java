@@ -25,7 +25,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.autoconfigure.data.cassandra.DataCassandraTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.context.annotation.Bean;
@@ -37,9 +37,10 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Smoke tests for Cassandra with SSL.
  *
  * @author Scott Frederick
+ * @author Eddú Meléndez
  */
 @Testcontainers(disabledWithoutDocker = true)
-@SpringBootTest(properties = { "spring.cassandra.schema-action=create-if-not-exists",
+@DataCassandraTest(properties = { "spring.cassandra.schema-action=create-if-not-exists",
 		"spring.cassandra.connection.connect-timeout=60s", "spring.cassandra.connection.init-query-timeout=60s",
 		"spring.cassandra.request.timeout=60s", "spring.cassandra.ssl.bundle=client",
 		"spring.ssl.bundle.jks.client.keystore.location=classpath:ssl/test-client.p12",
@@ -79,7 +80,7 @@ class SampleCassandraApplicationSslTests {
 		CqlSession cqlSession(CqlSessionBuilder cqlSessionBuilder) {
 			try (CqlSession session = cqlSessionBuilder.build()) {
 				session.execute("CREATE KEYSPACE IF NOT EXISTS boot_test"
-						+ "  WITH REPLICATION = { 'class' : 'SimpleStrategy', 'replication_factor' : 1 };");
+						+ " WITH REPLICATION = { 'class' : 'SimpleStrategy', 'replication_factor' : 1 };");
 			}
 			return cqlSessionBuilder.withKeyspace("boot_test").build();
 		}

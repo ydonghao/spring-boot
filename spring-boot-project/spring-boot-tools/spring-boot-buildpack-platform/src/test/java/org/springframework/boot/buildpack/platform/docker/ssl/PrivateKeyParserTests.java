@@ -19,10 +19,10 @@ package org.springframework.boot.buildpack.platform.docker.ssl;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.security.PrivateKey;
+import java.security.interfaces.ECPrivateKey;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -63,7 +63,6 @@ class PrivateKeyParserTests {
 		PrivateKey privateKey = PrivateKeyParser.parse(path);
 		assertThat(privateKey).isNotNull();
 		assertThat(privateKey.getFormat()).isEqualTo("PKCS#8");
-		Files.delete(path);
 	}
 
 	@ParameterizedTest
@@ -91,19 +90,27 @@ class PrivateKeyParserTests {
 		Path path = this.fileWriter.writeFile("key.pem", PemFileWriter.PRIVATE_RSA_KEY);
 		PrivateKey privateKey = PrivateKeyParser.parse(path);
 		assertThat(privateKey).isNotNull();
-		// keys in PKCS#1 format are converted to PKCS#8 for parsing
 		assertThat(privateKey.getFormat()).isEqualTo("PKCS#8");
-		Files.delete(path);
 	}
 
 	@Test
-	void parsePkcs1EcKeyFile() throws IOException {
+	void parsePemEcKeyFile() throws IOException {
 		Path path = this.fileWriter.writeFile("key.pem", PemFileWriter.PRIVATE_EC_KEY);
-		PrivateKey privateKey = PrivateKeyParser.parse(path);
+		ECPrivateKey privateKey = (ECPrivateKey) PrivateKeyParser.parse(path);
 		assertThat(privateKey).isNotNull();
-		// keys in PKCS#1 format are converted to PKCS#8 for parsing
 		assertThat(privateKey.getFormat()).isEqualTo("PKCS#8");
-		Files.delete(path);
+		assertThat(privateKey.getAlgorithm()).isEqualTo("EC");
+		assertThat(privateKey.getParams().toString()).contains("1.3.132.0.34").doesNotContain("prime256v1");
+	}
+
+	@Test
+	void parsePemEcKeyFilePrime256v1() throws IOException {
+		Path path = this.fileWriter.writeFile("key.pem", PemFileWriter.PRIVATE_EC_KEY_PRIME_256_V1);
+		ECPrivateKey privateKey = (ECPrivateKey) PrivateKeyParser.parse(path);
+		assertThat(privateKey).isNotNull();
+		assertThat(privateKey.getFormat()).isEqualTo("PKCS#8");
+		assertThat(privateKey.getAlgorithm()).isEqualTo("EC");
+		assertThat(privateKey.getParams().toString()).contains("prime256v1").doesNotContain("1.3.132.0.34");
 	}
 
 	@Test
@@ -120,7 +127,6 @@ class PrivateKeyParserTests {
 		Path path = this.fileWriter.writeFile("text.pem", "plain text");
 		assertThatIllegalStateException().isThrownBy(() -> PrivateKeyParser.parse(path))
 			.withMessageContaining(path.toString());
-		Files.delete(path);
 	}
 
 	@Test

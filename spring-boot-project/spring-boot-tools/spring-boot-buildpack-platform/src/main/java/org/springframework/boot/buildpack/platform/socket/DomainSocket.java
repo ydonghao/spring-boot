@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2020 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -69,8 +69,14 @@ public abstract class DomainSocket extends AbstractSocket {
 
 	private FileDescriptor open(String path) {
 		int handle = socket(PF_LOCAL, SOCK_STREAM, 0);
-		connect(path, handle);
-		return new FileDescriptor(handle, this::close);
+		try {
+			connect(path, handle);
+			return new FileDescriptor(handle, this::close);
+		}
+		catch (RuntimeException ex) {
+			close(handle);
+			throw ex;
+		}
 	}
 
 	private int read(ByteBuffer buffer) throws IOException {
@@ -151,7 +157,7 @@ public abstract class DomainSocket extends AbstractSocket {
 	/**
 	 * {@link InputStream} returned from the {@link DomainSocket}.
 	 */
-	private class DomainSocketInputStream extends InputStream {
+	private final class DomainSocketInputStream extends InputStream {
 
 		@Override
 		public int read() throws IOException {
@@ -174,7 +180,7 @@ public abstract class DomainSocket extends AbstractSocket {
 	/**
 	 * {@link OutputStream} returned from the {@link DomainSocket}.
 	 */
-	private class DomainSocketOutputStream extends OutputStream {
+	private final class DomainSocketOutputStream extends OutputStream {
 
 		@Override
 		public void write(int b) throws IOException {

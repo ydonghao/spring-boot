@@ -1,9 +1,11 @@
 services:
   database:
-    image: 'gvenzl/oracle-xe:18.4.0-slim'
+    image: '{imageName}'
     ports:
       - '1521'
     environment:
+      - 'APP_USER=app_user'
+      - 'APP_USER_PASSWORD=app_user_secret'
       - 'ORACLE_PASSWORD=secret'
     healthcheck:
       test: ["CMD-SHELL", "healthcheck.sh"]

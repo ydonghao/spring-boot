@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2023 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -33,13 +33,16 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnThreading;
 import org.springframework.boot.autoconfigure.data.redis.RedisProperties.Lettuce.Cluster.Refresh;
 import org.springframework.boot.autoconfigure.data.redis.RedisProperties.Pool;
+import org.springframework.boot.autoconfigure.thread.Threading;
 import org.springframework.boot.ssl.SslBundle;
 import org.springframework.boot.ssl.SslBundles;
 import org.springframework.boot.ssl.SslOptions;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.task.SimpleAsyncTaskExecutor;
 import org.springframework.data.redis.connection.RedisClusterConfiguration;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.connection.RedisSentinelConfiguration;
@@ -83,7 +86,27 @@ class LettuceConnectionConfiguration extends RedisConnectionConfiguration {
 
 	@Bean
 	@ConditionalOnMissingBean(RedisConnectionFactory.class)
+	@ConditionalOnThreading(Threading.PLATFORM)
 	LettuceConnectionFactory redisConnectionFactory(
+			ObjectProvider<LettuceClientConfigurationBuilderCustomizer> builderCustomizers,
+			ClientResources clientResources) {
+		return createConnectionFactory(builderCustomizers, clientResources);
+	}
+
+	@Bean
+	@ConditionalOnMissingBean(RedisConnectionFactory.class)
+	@ConditionalOnThreading(Threading.VIRTUAL)
+	LettuceConnectionFactory redisConnectionFactoryVirtualThreads(
+			ObjectProvider<LettuceClientConfigurationBuilderCustomizer> builderCustomizers,
+			ClientResources clientResources) {
+		LettuceConnectionFactory factory = createConnectionFactory(builderCustomizers, clientResources);
+		SimpleAsyncTaskExecutor executor = new SimpleAsyncTaskExecutor("redis-");
+		executor.setVirtualThreads(true);
+		factory.setExecutor(executor);
+		return factory;
+	}
+
+	private LettuceConnectionFactory createConnectionFactory(
 			ObjectProvider<LettuceClientConfigurationBuilderCustomizer> builderCustomizers,
 			ClientResources clientResources) {
 		LettuceClientConfiguration clientConfig = getLettuceClientConfiguration(builderCustomizers, clientResources,
@@ -189,7 +212,7 @@ class LettuceConnectionConfiguration extends RedisConnectionConfiguration {
 	/**
 	 * Inner class to allow optional commons-pool2 dependency.
 	 */
-	private static class PoolBuilderFactory {
+	private static final class PoolBuilderFactory {
 
 		LettuceClientConfigurationBuilder createBuilder(Pool properties) {
 			return LettucePoolingClientConfiguration.builder().poolConfig(getPoolConfig(properties));

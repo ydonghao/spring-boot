@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2023 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,6 +28,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.boot.context.properties.DeprecatedConfigurationProperty;
 import org.springframework.boot.convert.DurationUnit;
 
 /**
@@ -291,36 +292,9 @@ public class FlywayProperties {
 	private String[] errorOverrides;
 
 	/**
-	 * Licence key for Flyway Teams.
-	 */
-	private String licenseKey;
-
-	/**
-	 * Whether to enable support for Oracle SQL*Plus commands. Requires Flyway Teams.
-	 */
-	private Boolean oracleSqlplus;
-
-	/**
-	 * Whether to issue a warning rather than an error when a not-yet-supported Oracle
-	 * SQL*Plus statement is encountered. Requires Flyway Teams.
-	 */
-	private Boolean oracleSqlplusWarn;
-
-	/**
 	 * Whether to stream SQL migrations when executing them. Requires Flyway Teams.
 	 */
 	private Boolean stream;
-
-	/**
-	 * File name prefix for undo SQL migrations. Requires Flyway Teams.
-	 */
-	private String undoSqlMigrationPrefix;
-
-	/**
-	 * Migrations that Flyway should consider when migrating or undoing. When empty all
-	 * available migrations are considered. Requires Flyway Teams.
-	 */
-	private String[] cherryPick;
 
 	/**
 	 * Properties to pass to the JDBC driver. Requires Flyway Teams.
@@ -333,26 +307,10 @@ public class FlywayProperties {
 	private String kerberosConfigFile;
 
 	/**
-	 * Path of the Oracle Kerberos cache file. Requires Flyway Teams.
-	 */
-	private String oracleKerberosCacheFile;
-
-	/**
-	 * Location of the Oracle Wallet, used to sign in to the database automatically.
-	 * Requires Flyway Teams.
-	 */
-	private String oracleWalletLocation;
-
-	/**
 	 * Whether Flyway should output a table with the results of queries when executing
 	 * migrations. Requires Flyway Teams.
 	 */
 	private Boolean outputQueryResults;
-
-	/**
-	 * Path to the SQL Server Kerberos login file. Requires Flyway Teams.
-	 */
-	private String sqlServerKerberosLoginFile;
 
 	/**
 	 * Whether Flyway should skip executing the contents of the migrations and only update
@@ -371,6 +329,12 @@ public class FlywayProperties {
 	 * Flyway Teams.
 	 */
 	private Boolean detectEncoding;
+
+	private final Oracle oracle = new Oracle();
+
+	private final Postgresql postgresql = new Postgresql();
+
+	private final Sqlserver sqlserver = new Sqlserver();
 
 	public boolean isEnabled() {
 		return this.enabled;
@@ -748,36 +712,37 @@ public class FlywayProperties {
 		this.errorOverrides = errorOverrides;
 	}
 
-	public String getLicenseKey() {
-		return this.licenseKey;
-	}
-
-	public void setLicenseKey(String licenseKey) {
-		this.licenseKey = licenseKey;
-	}
-
+	@DeprecatedConfigurationProperty(replacement = "spring.flyway.oracle.sqlplus", since = "3.2.0")
+	@Deprecated(since = "3.2.0", forRemoval = true)
 	public Boolean getOracleSqlplus() {
-		return this.oracleSqlplus;
+		return getOracle().getSqlplus();
 	}
 
+	@Deprecated(since = "3.2.0", forRemoval = true)
 	public void setOracleSqlplus(Boolean oracleSqlplus) {
-		this.oracleSqlplus = oracleSqlplus;
+		getOracle().setSqlplus(oracleSqlplus);
 	}
 
+	@DeprecatedConfigurationProperty(replacement = "spring.flyway.oracle.sqlplus-warn", since = "3.2.0")
+	@Deprecated(since = "3.2.0", forRemoval = true)
 	public Boolean getOracleSqlplusWarn() {
-		return this.oracleSqlplusWarn;
+		return getOracle().getSqlplusWarn();
 	}
 
+	@Deprecated(since = "3.2.0", forRemoval = true)
 	public void setOracleSqlplusWarn(Boolean oracleSqlplusWarn) {
-		this.oracleSqlplusWarn = oracleSqlplusWarn;
+		getOracle().setSqlplusWarn(oracleSqlplusWarn);
 	}
 
+	@DeprecatedConfigurationProperty(replacement = "spring.flyway.oracle.wallet-location", since = "3.2.0")
+	@Deprecated(since = "3.2.0", forRemoval = true)
 	public String getOracleWalletLocation() {
-		return this.oracleWalletLocation;
+		return getOracle().getWalletLocation();
 	}
 
+	@Deprecated(since = "3.2.0", forRemoval = true)
 	public void setOracleWalletLocation(String oracleWalletLocation) {
-		this.oracleWalletLocation = oracleWalletLocation;
+		getOracle().setWalletLocation(oracleWalletLocation);
 	}
 
 	public Boolean getStream() {
@@ -786,22 +751,6 @@ public class FlywayProperties {
 
 	public void setStream(Boolean stream) {
 		this.stream = stream;
-	}
-
-	public String getUndoSqlMigrationPrefix() {
-		return this.undoSqlMigrationPrefix;
-	}
-
-	public void setUndoSqlMigrationPrefix(String undoSqlMigrationPrefix) {
-		this.undoSqlMigrationPrefix = undoSqlMigrationPrefix;
-	}
-
-	public String[] getCherryPick() {
-		return this.cherryPick;
-	}
-
-	public void setCherryPick(String[] cherryPick) {
-		this.cherryPick = cherryPick;
 	}
 
 	public Map<String, String> getJdbcProperties() {
@@ -820,12 +769,15 @@ public class FlywayProperties {
 		this.kerberosConfigFile = kerberosConfigFile;
 	}
 
+	@DeprecatedConfigurationProperty(replacement = "spring.flyway.oracle.kerberos-cache-file", since = "3.2.0")
+	@Deprecated(since = "3.2.0", forRemoval = true)
 	public String getOracleKerberosCacheFile() {
-		return this.oracleKerberosCacheFile;
+		return getOracle().getKerberosCacheFile();
 	}
 
+	@Deprecated(since = "3.2.0", forRemoval = true)
 	public void setOracleKerberosCacheFile(String oracleKerberosCacheFile) {
-		this.oracleKerberosCacheFile = oracleKerberosCacheFile;
+		getOracle().setKerberosCacheFile(oracleKerberosCacheFile);
 	}
 
 	public Boolean getOutputQueryResults() {
@@ -836,12 +788,15 @@ public class FlywayProperties {
 		this.outputQueryResults = outputQueryResults;
 	}
 
+	@DeprecatedConfigurationProperty(replacement = "spring.flyway.sqlserver.kerberos-login-file")
+	@Deprecated(since = "3.2.0", forRemoval = true)
 	public String getSqlServerKerberosLoginFile() {
-		return this.sqlServerKerberosLoginFile;
+		return getSqlserver().getKerberosLoginFile();
 	}
 
+	@Deprecated(since = "3.2.0", forRemoval = true)
 	public void setSqlServerKerberosLoginFile(String sqlServerKerberosLoginFile) {
-		this.sqlServerKerberosLoginFile = sqlServerKerberosLoginFile;
+		getSqlserver().setKerberosLoginFile(sqlServerKerberosLoginFile);
 	}
 
 	public Boolean getSkipExecutingMigrations() {
@@ -866,6 +821,120 @@ public class FlywayProperties {
 
 	public void setDetectEncoding(final Boolean detectEncoding) {
 		this.detectEncoding = detectEncoding;
+	}
+
+	public Oracle getOracle() {
+		return this.oracle;
+	}
+
+	public Postgresql getPostgresql() {
+		return this.postgresql;
+	}
+
+	public Sqlserver getSqlserver() {
+		return this.sqlserver;
+	}
+
+	/**
+	 * {@code OracleConfigurationExtension} properties.
+	 */
+	public static class Oracle {
+
+		/**
+		 * Whether to enable support for Oracle SQL*Plus commands. Requires Flyway Teams.
+		 */
+		private Boolean sqlplus;
+
+		/**
+		 * Whether to issue a warning rather than an error when a not-yet-supported Oracle
+		 * SQL*Plus statement is encountered. Requires Flyway Teams.
+		 */
+		private Boolean sqlplusWarn;
+
+		/**
+		 * Path of the Oracle Kerberos cache file. Requires Flyway Teams.
+		 */
+		private String kerberosCacheFile;
+
+		/**
+		 * Location of the Oracle Wallet, used to sign in to the database automatically.
+		 * Requires Flyway Teams.
+		 */
+		private String walletLocation;
+
+		public Boolean getSqlplus() {
+			return this.sqlplus;
+		}
+
+		public void setSqlplus(Boolean sqlplus) {
+			this.sqlplus = sqlplus;
+		}
+
+		public Boolean getSqlplusWarn() {
+			return this.sqlplusWarn;
+		}
+
+		public void setSqlplusWarn(Boolean sqlplusWarn) {
+			this.sqlplusWarn = sqlplusWarn;
+		}
+
+		public String getKerberosCacheFile() {
+			return this.kerberosCacheFile;
+		}
+
+		public void setKerberosCacheFile(String kerberosCacheFile) {
+			this.kerberosCacheFile = kerberosCacheFile;
+		}
+
+		public String getWalletLocation() {
+			return this.walletLocation;
+		}
+
+		public void setWalletLocation(String walletLocation) {
+			this.walletLocation = walletLocation;
+		}
+
+	}
+
+	/**
+	 * {@code PostgreSQLConfigurationExtension} properties.
+	 */
+	public static class Postgresql {
+
+		/**
+		 * Whether transactional advisory locks should be used. If set to false,
+		 * session-level locks are used instead.
+		 */
+		private Boolean transactionalLock;
+
+		public Boolean getTransactionalLock() {
+			return this.transactionalLock;
+		}
+
+		public void setTransactionalLock(Boolean transactionalLock) {
+			this.transactionalLock = transactionalLock;
+		}
+
+	}
+
+	/**
+	 * {@code SQLServerConfigurationExtension} properties.
+	 */
+	public static class Sqlserver {
+
+		/**
+		 * Path to the SQL Server Kerberos login file. Requires Flyway Teams.
+		 */
+		private String kerberosLoginFile;
+
+		public String getKerberosLoginFile() {
+			return this.kerberosLoginFile;
+		}
+
+		public void setKerberosLoginFile(String kerberosLoginFile) {
+			this.kerberosLoginFile = kerberosLoginFile;
+		}
+
 	}
 
 }

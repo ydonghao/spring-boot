@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2023 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -29,14 +29,19 @@ import java.util.Set;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
 
+import org.springframework.aot.AotDetector;
 import org.springframework.boot.SpringApplicationShutdownHandlers;
 import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.boot.docker.compose.core.DockerCompose;
 import org.springframework.boot.docker.compose.core.DockerComposeFile;
 import org.springframework.boot.docker.compose.core.RunningService;
 import org.springframework.boot.docker.compose.lifecycle.DockerComposeProperties.Readiness.Wait;
+import org.springframework.boot.docker.compose.lifecycle.DockerComposeProperties.Start.Skip;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationListener;
 import org.springframework.context.support.GenericApplicationContext;
@@ -58,6 +63,7 @@ import static org.mockito.Mockito.never;
  * @author Phillip Webb
  * @author Scott Frederick
  */
+@ExtendWith(OutputCaptureExtension.class)
 class DockerComposeLifecycleManagerTests {
 
 	@TempDir
@@ -114,6 +120,30 @@ class DockerComposeLifecycleManagerTests {
 		this.lifecycleManager.start();
 		assertThat(listener.getEvent()).isNull();
 		then(this.dockerCompose).should(never()).hasDefinedServices();
+	}
+
+	@Test
+	void startWhenAotProcessingDoesNotStart() {
+		withSystemProperty("spring.aot.processing", "true", () -> {
+			EventCapturingListener listener = new EventCapturingListener();
+			this.eventListeners.add(listener);
+			setUpRunningServices();
+			this.lifecycleManager.start();
+			assertThat(listener.getEvent()).isNull();
+			then(this.dockerCompose).should(never()).hasDefinedServices();
+		});
+	}
+
+	@Test
+	void startWhenUsingAotArtifactsDoesNotStart() {
+		withSystemProperty(AotDetector.AOT_ENABLED, "true", () -> {
+			EventCapturingListener listener = new EventCapturingListener();
+			this.eventListeners.add(listener);
+			setUpRunningServices();
+			this.lifecycleManager.start();
+			assertThat(listener.getEvent()).isNull();
+			then(this.dockerCompose).should(never()).hasDefinedServices();
+		});
 	}
 
 	@Test
@@ -340,6 +370,53 @@ class DockerComposeLifecycleManagerTests {
 		assertThat(event.getRunningServices()).isEqualTo(this.runningServices);
 	}
 
+	@Test
+	void shouldLogIfServicesAreAlreadyRunning(CapturedOutput output) {
+		setUpRunningServices();
+		this.lifecycleManager.start();
+		assertThat(output).contains("There are already Docker Compose services running, skipping startup");
+	}
+
+	@Test
+	void shouldNotLogIfThereAreNoServicesRunning(CapturedOutput output) {
+		given(this.dockerCompose.hasDefinedServices()).willReturn(true);
+		given(this.dockerCompose.getRunningServices()).willReturn(Collections.emptyList());
+		this.lifecycleManager.start();
+		assertThat(output).doesNotContain("There are already Docker Compose services running, skipping startup");
+	}
+
+	@Test
+	void shouldStartIfSkipModeIsIfRunningAndNoServicesAreRunning() {
+		given(this.dockerCompose.hasDefinedServices()).willReturn(true);
+		this.properties.getStart().setSkip(Skip.IF_RUNNING);
+		this.lifecycleManager.start();
+		then(this.dockerCompose).should().up(any());
+	}
+
+	@Test
+	void shouldNotStartIfSkipModeIsIfRunningAndServicesAreAlreadyRunning() {
+		setUpRunningServices();
+		this.properties.getStart().setSkip(Skip.IF_RUNNING);
+		this.lifecycleManager.start();
+		then(this.dockerCompose).should(never()).up(any());
+	}
+
+	@Test
+	void shouldStartIfSkipModeIsNeverAndNoServicesAreRunning() {
+		given(this.dockerCompose.hasDefinedServices()).willReturn(true);
+		this.properties.getStart().setSkip(Skip.NEVER);
+		this.lifecycleManager.start();
+		then(this.dockerCompose).should().up(any());
+	}
+
+	@Test
+	void shouldStartIfSkipModeIsNeverAndServicesAreAlreadyRunning() {
+		setUpRunningServices();
+		this.properties.getStart().setSkip(Skip.NEVER);
+		this.lifecycleManager.start();
+		then(this.dockerCompose).should().up(any());
+	}
+
 	private void setUpRunningServices() {
 		setUpRunningServices(true);
 	}
@@ -359,6 +436,22 @@ class DockerComposeLifecycleManagerTests {
 		}
 		else {
 			given(this.dockerCompose.getRunningServices()).willReturn(Collections.emptyList(), this.runningServices);
+		}
+	}
+
+	private void withSystemProperty(String key, String value, Runnable action) {
+		String previous = System.getProperty(key);
+		try {
+			System.setProperty(key, value);
+			action.run();
+		}
+		finally {
+			if (previous == null) {
+				System.clearProperty(key);
+			}
+			else {
+				System.setProperty(key, previous);
+			}
 		}
 	}
 

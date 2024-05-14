@@ -55,7 +55,7 @@ class ConventionsPluginTests {
 		File settingsFile = new File(this.projectDir, "settings.gradle");
 		try (PrintWriter out = new PrintWriter(new FileWriter(settingsFile))) {
 			out.println("plugins {");
-			out.println("    id 'com.gradle.enterprise'");
+			out.println("    id 'com.gradle.develocity'");
 			out.println("}");
 			out.println("include ':spring-boot-project:spring-boot-parent'");
 		}
@@ -187,7 +187,7 @@ class ConventionsPluginTests {
 		}
 		assertThat(runGradle(Collections.singletonMap("CI", "true"), "retryConfig", "--stacktrace").getOutput())
 			.contains("maxRetries: 3")
-			.contains("failOnPassedAfterRetry: true");
+			.contains("failOnPassedAfterRetry: false");
 	}
 
 	@Test
@@ -209,7 +209,7 @@ class ConventionsPluginTests {
 		}
 		assertThat(runGradle(Collections.singletonMap("CI", "local"), "retryConfig", "--stacktrace").getOutput())
 			.contains("maxRetries: 0")
-			.contains("failOnPassedAfterRetry: true");
+			.contains("failOnPassedAfterRetry: false");
 	}
 
 	private BuildResult runGradle(String... args) {

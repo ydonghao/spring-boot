@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2023 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -31,7 +31,6 @@ import org.springframework.beans.factory.BeanFactory;
 import org.springframework.beans.factory.ListableBeanFactory;
 import org.springframework.beans.factory.NoSuchBeanDefinitionException;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.AutoConfigureOrder;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
@@ -403,24 +402,6 @@ public class WebMvcAutoConfiguration {
 			this.beanFactory = beanFactory;
 		}
 
-		@Bean
-		@Override
-		public RequestMappingHandlerAdapter requestMappingHandlerAdapter(
-				@Qualifier("mvcContentNegotiationManager") ContentNegotiationManager contentNegotiationManager,
-				@Qualifier("mvcConversionService") FormattingConversionService conversionService,
-				@Qualifier("mvcValidator") Validator validator) {
-			RequestMappingHandlerAdapter adapter = super.requestMappingHandlerAdapter(contentNegotiationManager,
-					conversionService, validator);
-			setIgnoreDefaultModelOnRedirect(adapter);
-			return adapter;
-		}
-
-		@SuppressWarnings({ "deprecation", "removal" })
-		private void setIgnoreDefaultModelOnRedirect(RequestMappingHandlerAdapter adapter) {
-			adapter.setIgnoreDefaultModelOnRedirect(
-					this.mvcProperties == null || this.mvcProperties.isIgnoreDefaultModelOnRedirect());
-		}
-
 		@Override
 		protected RequestMappingHandlerAdapter createRequestMappingHandlerAdapter() {
 			if (this.mvcRegistrations != null) {
@@ -514,6 +495,7 @@ public class WebMvcAutoConfiguration {
 				}
 			}
 			catch (Exception ex) {
+				// Ignore
 			}
 			return null;
 		}
@@ -681,6 +663,7 @@ public class WebMvcAutoConfiguration {
 
 		@Bean
 		@ConditionalOnMissingBean(ResponseEntityExceptionHandler.class)
+		@Order(0)
 		ProblemDetailsExceptionHandler problemDetailsExceptionHandler() {
 			return new ProblemDetailsExceptionHandler();
 		}

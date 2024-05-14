@@ -116,12 +116,26 @@
       }
     },
     {
+      "name": "server.max-http-header-size",
+      "deprecation": {
+        "replacement": "server.max-http-request-header-size",
+        "level": "error"
+      }
+    },
+    {
       "name": "server.max-http-post-size",
       "type": "java.lang.Integer",
       "description": "Maximum size in bytes of the HTTP post content.",
       "defaultValue": 0,
       "deprecation": {
         "reason": "Use dedicated property for each container.",
+        "level": "error"
+      }
+    },
+    {
+      "name": "server.netty.max-chunk-size",
+      "deprecation": {
+        "reason": "Deprecated for removal in Reactor Netty.",
         "level": "error"
       }
     },
@@ -210,7 +224,10 @@
     },
     {
       "name": "server.servlet.session.cookie.comment",
-      "description": "Comment for the cookie."
+      "description": "Comment for the cookie.",
+      "deprecation": {
+        "level": "error"
+      }
     },
     {
       "name": "server.servlet.session.cookie.domain",
@@ -319,6 +336,10 @@
       "name": "server.ssl.protocol",
       "description": "SSL protocol to use.",
       "defaultValue": "TLS"
+    },
+    {
+      "name": "server.ssl.server-name-bundles",
+      "description": "Mapping of host names to SSL bundles for SNI configuration."
     },
     {
       "name": "server.ssl.trust-certificate",
@@ -651,6 +672,26 @@
       "deprecation": {
         "replacement": "spring.couchbase.env.io.min-endpoints",
         "level": "error"
+      }
+    },
+    {
+      "name": "spring.couchbase.env.ssl.key-store",
+      "type": "java.lang.String",
+      "description": "Path to the JVM key store that holds the certificates.",
+      "deprecation": {
+        "replacement": "spring.couchbase.env.ssl.bundle",
+        "level": "error",
+        "since": "3.1.0"
+      }
+    },
+    {
+      "name": "spring.couchbase.env.ssl.key-store-password",
+      "type": "java.lang.String",
+      "description": "Password used to access the key store.",
+      "deprecation": {
+        "replacement": "spring.couchbase.env.ssl.bundle",
+        "level": "error",
+        "since": "3.1.0"
       }
     },
     {
@@ -1299,6 +1340,14 @@
       }
     },
     {
+      "name": "spring.flyway.cherry-pick",
+      "description": "Migrations that Flyway should consider when migrating or undoing. When empty all available migrations are considered. Requires Flyway Teams.",
+      "deprecation": {
+        "level": "error",
+        "reason": "Removed in Flyway 10"
+      }
+    },
+    {
       "name": "spring.flyway.dry-run-output",
       "type": "java.io.OutputStream",
       "deprecation": {
@@ -1355,6 +1404,14 @@
       }
     },
     {
+      "name": "spring.flyway.license-key",
+      "description": "License key for Flyway Teams.",
+      "deprecation": {
+        "level": "error",
+        "reason": "Removed in Flyway 10"
+      }
+    },
+    {
       "name": "spring.flyway.locations",
       "sourceType": "org.springframework.boot.autoconfigure.flyway.FlywayProperties",
       "defaultValue": [
@@ -1389,7 +1446,7 @@
       "type": "java.lang.String",
       "deprecation": {
         "level": "error",
-        "reason": "Flyway Teams only."
+        "reason": "Removed in Flyway 10"
       }
     },
     {
@@ -1543,6 +1600,10 @@
       "defaultValue": "default"
     },
     {
+      "name": "spring.jackson.datatype.enum",
+      "description": "Jackson on/off features for enums."
+    },
+    {
       "name": "spring.jackson.joda-date-time-format",
       "type": "java.lang.String",
       "description": "Joda date time format string. If not configured, \"date-format\" is used as a fallback if it is configured with a format string.",
@@ -1553,6 +1614,18 @@
     {
       "name": "spring.jersey.type",
       "defaultValue": "servlet"
+    },
+    {
+      "name": "spring.jms.listener.session.acknowledge-mode",
+      "defaultValue": "auto"
+    },
+    {
+      "name": "spring.jms.template.session.acknowledge-mode",
+      "defaultValue": "auto"
+    },
+    {
+      "name": "spring.jmx.registration-policy",
+      "defaultValue": "fail-on-existing"
     },
     {
       "name": "spring.jpa.hibernate.use-new-id-generator-mappings",
@@ -1566,167 +1639,6 @@
     {
       "name": "spring.jpa.open-in-view",
       "defaultValue": true
-    },
-    {
-      "name": "spring.jta.bitronix.properties.allow-multiple-lrc",
-      "type": "java.lang.Boolean",
-      "deprecation": {
-        "level": "error"
-      }
-    },
-    {
-      "name": "spring.jta.bitronix.properties.asynchronous2-pc",
-      "type": "java.lang.Boolean",
-      "deprecation": {
-        "level": "error"
-      }
-    },
-    {
-      "name": "spring.jta.bitronix.properties.background-recovery-interval",
-      "type": "java.lang.Integer",
-      "deprecation": {
-        "level": "error"
-      }
-    },
-    {
-      "name": "spring.jta.bitronix.properties.background-recovery-interval-seconds",
-      "type": "java.lang.Integer",
-      "deprecation": {
-        "level": "error"
-      }
-    },
-    {
-      "name": "spring.jta.bitronix.properties.current-node-only-recovery",
-      "type": "java.lang.Boolean",
-      "deprecation": {
-        "level": "error"
-      }
-    },
-    {
-      "name": "spring.jta.bitronix.properties.debug-zero-resource-transaction",
-      "type": "java.lang.Boolean",
-      "deprecation": {
-        "level": "error"
-      }
-    },
-    {
-      "name": "spring.jta.bitronix.properties.default-transaction-timeout",
-      "type": "java.lang.Integer",
-      "deprecation": {
-        "level": "error"
-      }
-    },
-    {
-      "name": "spring.jta.bitronix.properties.disable-jmx",
-      "type": "java.lang.Boolean",
-      "deprecation": {
-        "level": "error"
-      }
-    },
-    {
-      "name": "spring.jta.bitronix.properties.exception-analyzer",
-      "type": "java.lang.String",
-      "deprecation": {
-        "level": "error"
-      }
-    },
-    {
-      "name": "spring.jta.bitronix.properties.filter-log-status",
-      "type": "java.lang.Boolean",
-      "deprecation": {
-        "level": "error"
-      }
-    },
-    {
-      "name": "spring.jta.bitronix.properties.force-batching-enabled",
-      "type": "java.lang.Boolean",
-      "deprecation": {
-        "level": "error"
-      }
-    },
-    {
-      "name": "spring.jta.bitronix.properties.forced-write-enabled",
-      "type": "java.lang.Boolean",
-      "deprecation": {
-        "level": "error"
-      }
-    },
-    {
-      "name": "spring.jta.bitronix.properties.graceful-shutdown-interval",
-      "type": "java.lang.String",
-      "deprecation": {
-        "level": "error"
-      }
-    },
-    {
-      "name": "spring.jta.bitronix.properties.jndi-transaction-synchronization-registry-name",
-      "type": "java.lang.String",
-      "deprecation": {
-        "level": "error"
-      }
-    },
-    {
-      "name": "spring.jta.bitronix.properties.jndi-user-transaction-name",
-      "type": "java.lang.String",
-      "deprecation": {
-        "level": "error"
-      }
-    },
-    {
-      "name": "spring.jta.bitronix.properties.journal",
-      "type": "java.lang.String",
-      "deprecation": {
-        "level": "error"
-      }
-    },
-    {
-      "name": "spring.jta.bitronix.properties.log-part1-filename",
-      "type": "java.lang.String",
-      "deprecation": {
-        "level": "error"
-      }
-    },
-    {
-      "name": "spring.jta.bitronix.properties.log-part2-filename",
-      "type": "java.lang.String",
-      "deprecation": {
-        "level": "error"
-      }
-    },
-    {
-      "name": "spring.jta.bitronix.properties.max-log-size-in-mb",
-      "type": "java.lang.Integer",
-      "deprecation": {
-        "level": "error"
-      }
-    },
-    {
-      "name": "spring.jta.bitronix.properties.resource-configuration-filename",
-      "type": "java.lang.String",
-      "deprecation": {
-        "level": "error"
-      }
-    },
-    {
-      "name": "spring.jta.bitronix.properties.server-id",
-      "type": "java.lang.String",
-      "deprecation": {
-        "level": "error"
-      }
-    },
-    {
-      "name": "spring.jta.bitronix.properties.skip-corrupted-logs",
-      "type": "java.lang.Boolean",
-      "deprecation": {
-        "level": "error"
-      }
-    },
-    {
-      "name": "spring.jta.bitronix.properties.warn-about-zero-resource-transaction",
-      "type": "java.lang.Boolean",
-      "deprecation": {
-        "level": "error"
-      }
     },
     {
       "name": "spring.jta.enabled",
@@ -2029,8 +1941,17 @@
       "name": "spring.kafka.streams.cache-max-bytes-buffering",
       "type": "java.lang.Integer",
       "deprecation": {
-        "replacement": "spring.kafka.streams.cache-max-size-buffering",
+        "replacement": "spring.kafka.streams.state-store-cache-max-size",
         "level": "error"
+      }
+    },
+    {
+      "name": "spring.kafka.streams.cache-max-size-buffering",
+      "type": "java.lang.Integer",
+      "deprecation": {
+        "replacement": "spring.kafka.streams.state-store-cache-max-size",
+        "level": "error",
+        "since": "3.1.0"
       }
     },
     {
@@ -2042,6 +1963,25 @@
         "reason": "Liquibase has its own check that checks if the change log location exists making this property redundant.",
         "level": "error"
       }
+    },
+    {
+      "name": "spring.liquibase.labels",
+      "deprecation": {
+        "replacement": "spring.liquibase.label-filter",
+        "level": "error"
+      }
+    },
+    {
+      "name": "spring.liquibase.show-summary",
+      "defaultValue": "summary"
+    },
+    {
+      "name": "spring.liquibase.show-summary-output",
+      "defaultValue": "log"
+    },
+    {
+      "name": "spring.liquibase.ui-service",
+      "defaultValue": "logger"
     },
     {
       "name": "spring.mail.test-connection",
@@ -2106,6 +2046,13 @@
       "defaultValue": false
     },
     {
+      "name": "spring.mvc.ignore-default-model-on-redirect",
+      "deprecation": {
+        "reason": "Deprecated for removal in Spring MVC.",
+        "level": "error"
+      }
+    },
+    {
       "name": "spring.mvc.locale",
       "type": "java.util.Locale",
       "deprecation": {
@@ -2132,6 +2079,22 @@
     {
       "name": "spring.neo4j.uri",
       "defaultValue": "bolt://localhost:7687"
+    },
+    {
+      "name": "spring.pulsar.client.failover.policy",
+      "defaultValue": "order"
+    },
+    {
+      "name": "spring.pulsar.function.enabled",
+      "type": "java.lang.Boolean",
+      "description": "Whether to enable function support.",
+      "defaultValue": true
+    },
+    {
+      "name": "spring.pulsar.producer.cache.enabled",
+      "type": "java.lang.Boolean",
+      "description": "Whether to enable caching in the PulsarProducerFactory.",
+      "defaultValue": true
     },
     {
       "name": "spring.quartz.jdbc.comment-prefix",
@@ -2195,6 +2158,10 @@
         "replacement": "spring.rabbitmq.template.default-receive-queue",
         "level": "error"
       }
+    },
+    {
+      "name": "spring.reactor.context-propagation",
+      "defaultValue": "limited"
     },
     {
       "name": "spring.reactor.stacktrace-mode.enabled",
@@ -2714,6 +2681,10 @@
       "defaultValue": "TLS"
     },
     {
+      "name": "spring.rsocket.server.ssl.server-name-bundles",
+      "description": "Mapping of host names to SSL bundles for SNI configuration."
+    },
+    {
       "name": "spring.rsocket.server.ssl.trust-certificate",
       "description": "Path to a PEM-encoded SSL certificate authority file."
     },
@@ -2826,6 +2797,12 @@
       "defaultValue": "embedded"
     },
     {
+      "name": "spring.threads.virtual.enabled",
+      "type": "java.lang.Boolean",
+      "description": "Whether to use virtual threads.",
+      "defaultValue": false
+    },
+    {
       "name": "spring.thymeleaf.prefix",
       "defaultValue": "classpath:/templates/"
     },
@@ -2861,6 +2838,14 @@
       "type": "java.lang.Boolean",
       "description": "Whether to enable Spring's HiddenHttpMethodFilter.",
       "defaultValue": false
+    },
+    {
+      "name": "spring.webflux.multipart.streaming",
+      "type": "java.lang.Boolean",
+      "deprecation": {
+        "reason": "Replaced by the PartEventHttpMessageReader and the PartEvent API.",
+        "level": "error"
+      }
     },
     {
       "name": "spring.webservices.wsdl-locations",
@@ -3100,8 +3085,38 @@
       ]
     },
     {
-      "name": "spring.jmx.registration-policy",
-      "defaultValue": "fail-on-existing"
+      "name": "spring.jms.listener.session.acknowledge-mode",
+      "values": [
+        {
+          "value": "auto",
+          "description": "Messages sent or received from the session are automatically acknowledged. This is the simplest mode and enables once-only message delivery guarantee."
+        },
+        {
+          "value": "client",
+          "description": "Messages are acknowledged once the message listener implementation has called \"jakarta.jms.Message#acknowledge()\". This mode gives the application (rather than the JMS provider) complete control over message acknowledgement."
+        },
+        {
+          "value": "dups_ok",
+          "description": "Similar to auto acknowledgment except that said acknowledgment is lazy. As a consequence, the messages might be delivered more than once. This mode enables at-least-once message delivery guarantee."
+        }
+      ]
+    },
+    {
+      "name": "spring.jms.template.session.acknowledge-mode",
+      "values": [
+        {
+          "value": "auto",
+          "description": "Messages sent or received from the session are automatically acknowledged. This is the simplest mode and enables once-only message delivery guarantee."
+        },
+        {
+          "value": "client",
+          "description": "Messages are acknowledged once the message listener implementation has called \"jakarta.jms.Message#acknowledge()\". This mode gives the application (rather than the JMS provider) complete control over message acknowledgement."
+        },
+        {
+          "value": "dups_ok",
+          "description": "Similar to auto acknowledgment except that said acknowledgment is lazy. As a consequence, the messages might be delivered more than once. This mode enables at-least-once message delivery guarantee."
+        }
+      ]
     },
     {
       "name": "spring.jmx.server",
@@ -3406,14 +3421,6 @@
           "name": "any"
         }
       ]
-    },
-    {
-      "name": "spring.webflux.multipart.streaming",
-      "type": "java.lang.Boolean",
-      "deprecation": {
-        "reason": "Replaced by the PartEventHttpMessageReader and the PartEvent API.",
-        "level": "error"
-      }
     }
   ]
 }

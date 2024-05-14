@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2023 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,6 +21,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.boot.configurationprocessor.metadata.ConfigurationMetadata;
 import org.springframework.boot.configurationprocessor.metadata.ItemMetadata;
 import org.springframework.boot.configurationprocessor.metadata.Metadata;
+import org.springframework.boot.configurationsample.deprecation.Dbcp2Configuration;
+import org.springframework.boot.configurationsample.record.ExampleRecord;
 import org.springframework.boot.configurationsample.record.RecordWithGetter;
 import org.springframework.boot.configurationsample.recursive.RecursiveProperties;
 import org.springframework.boot.configurationsample.simple.ClassWithNestedProperties;
@@ -104,12 +106,12 @@ class ConfigurationMetadataAnnotationProcessorTests extends AbstractMetadataGene
 			.fromSource(SimpleProperties.class)
 			.withDescription("The name of this simple properties.")
 			.withDefaultValue("boot")
-			.withDeprecation(null, null));
+			.withDeprecation());
 		assertThat(metadata).has(Metadata.withProperty("simple.flag", Boolean.class)
 			.withDefaultValue(false)
 			.fromSource(SimpleProperties.class)
 			.withDescription("A simple flag.")
-			.withDeprecation(null, null));
+			.withDeprecation());
 		assertThat(metadata).has(Metadata.withProperty("simple.comparator"));
 		assertThat(metadata).doesNotHave(Metadata.withProperty("simple.counter"));
 		assertThat(metadata).doesNotHave(Metadata.withProperty("simple.size"));
@@ -188,10 +190,9 @@ class ConfigurationMetadataAnnotationProcessorTests extends AbstractMetadataGene
 		ConfigurationMetadata metadata = compile(type);
 		assertThat(metadata).has(Metadata.withGroup("deprecated").fromSource(type));
 		assertThat(metadata)
-			.has(Metadata.withProperty("deprecated.name", String.class).fromSource(type).withDeprecation(null, null));
-		assertThat(metadata).has(Metadata.withProperty("deprecated.description", String.class)
-			.fromSource(type)
-			.withDeprecation(null, null));
+			.has(Metadata.withProperty("deprecated.name", String.class).fromSource(type).withDeprecation());
+		assertThat(metadata)
+			.has(Metadata.withProperty("deprecated.description", String.class).fromSource(type).withDeprecation());
 	}
 
 	@Test
@@ -202,7 +203,7 @@ class ConfigurationMetadataAnnotationProcessorTests extends AbstractMetadataGene
 		assertThat(metadata).has(Metadata.withProperty("singledeprecated.new-name", String.class).fromSource(type));
 		assertThat(metadata).has(Metadata.withProperty("singledeprecated.name", String.class)
 			.fromSource(type)
-			.withDeprecation("renamed", "singledeprecated.new-name"));
+			.withDeprecation("renamed", "singledeprecated.new-name", "1.2.3"));
 	}
 
 	@Test
@@ -210,9 +211,8 @@ class ConfigurationMetadataAnnotationProcessorTests extends AbstractMetadataGene
 		Class<?> type = DeprecatedFieldSingleProperty.class;
 		ConfigurationMetadata metadata = compile(type);
 		assertThat(metadata).has(Metadata.withGroup("singlefielddeprecated").fromSource(type));
-		assertThat(metadata).has(Metadata.withProperty("singlefielddeprecated.name", String.class)
-			.fromSource(type)
-			.withDeprecation(null, null));
+		assertThat(metadata)
+			.has(Metadata.withProperty("singlefielddeprecated.name", String.class).fromSource(type).withDeprecation());
 	}
 
 	@Test
@@ -246,7 +246,7 @@ class ConfigurationMetadataAnnotationProcessorTests extends AbstractMetadataGene
 		assertThat(metadata).has(Metadata.withGroup("deprecated-record").fromSource(type));
 		assertThat(metadata).has(Metadata.withProperty("deprecated-record.alpha", String.class)
 			.fromSource(type)
-			.withDeprecation("some-reason", null));
+			.withDeprecation("some-reason", null, null));
 		assertThat(metadata).has(Metadata.withProperty("deprecated-record.bravo", String.class).fromSource(type));
 	}
 
@@ -508,6 +508,28 @@ class ConfigurationMetadataAnnotationProcessorTests extends AbstractMetadataGene
 		ConfigurationMetadata metadata = compile(RecordWithGetter.class);
 		assertThat(metadata).has(Metadata.withProperty("record-with-getter.alpha"));
 		assertThat(metadata).doesNotHave(Metadata.withProperty("record-with-getter.bravo"));
+	}
+
+	@Test
+	void shouldNotMarkDbcp2UsernameOrPasswordAsDeprecated() {
+		ConfigurationMetadata metadata = compile(Dbcp2Configuration.class);
+		assertThat(metadata).has(Metadata.withProperty("spring.datasource.dbcp2.username").withNoDeprecation());
+		assertThat(metadata).has(Metadata.withProperty("spring.datasource.dbcp2.password").withNoDeprecation());
+	}
+
+	@Test
+	void recordPropertiesWithDescriptions() {
+		ConfigurationMetadata metadata = compile(ExampleRecord.class);
+		assertThat(metadata).has(Metadata.withProperty("record.descriptions.some-string", String.class)
+			.withDescription("very long description that doesn't fit single line and is indented"));
+		assertThat(metadata).has(Metadata.withProperty("record.descriptions.some-integer", Integer.class)
+			.withDescription("description with @param and @ pitfalls"));
+		assertThat(metadata).has(Metadata.withProperty("record.descriptions.some-boolean", Boolean.class)
+			.withDescription("description with extra spaces"));
+		assertThat(metadata).has(Metadata.withProperty("record.descriptions.some-long", Long.class)
+			.withDescription("description without space after asterisk"));
+		assertThat(metadata).has(Metadata.withProperty("record.descriptions.some-byte", Byte.class)
+			.withDescription("last description in Javadoc"));
 	}
 
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2023 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -84,6 +84,7 @@ class JerseyWebEndpointManagementContextConfiguration {
 	private static final EndpointId HEALTH_ENDPOINT_ID = EndpointId.of("health");
 
 	@Bean
+	@SuppressWarnings("removal")
 	JerseyWebEndpointsResourcesRegistrar jerseyWebEndpointsResourcesRegistrar(Environment environment,
 			WebEndpointsSupplier webEndpointsSupplier, ServletEndpointsSupplier servletEndpointsSupplier,
 			EndpointMediaTypes endpointMediaTypes, WebEndpointProperties webEndpointProperties) {
@@ -103,7 +104,8 @@ class JerseyWebEndpointManagementContextConfiguration {
 		ExposableWebEndpoint health = webEndpoints.stream()
 			.filter((endpoint) -> endpoint.getEndpointId().equals(HEALTH_ENDPOINT_ID))
 			.findFirst()
-			.get();
+			.orElseThrow(
+					() -> new IllegalStateException("No endpoint with id '%s' found".formatted(HEALTH_ENDPOINT_ID)));
 		return new JerseyAdditionalHealthEndpointPathsManagementResourcesRegistrar(health, healthEndpointGroups);
 	}
 
@@ -123,6 +125,7 @@ class JerseyWebEndpointManagementContextConfiguration {
 	/**
 	 * Register endpoints with the {@link ResourceConfig} for the management context.
 	 */
+	@SuppressWarnings("removal")
 	static class JerseyWebEndpointsResourcesRegistrar implements ManagementContextResourceConfigCustomizer {
 
 		private final WebEndpointsSupplier webEndpointsSupplier;
@@ -197,7 +200,7 @@ class JerseyWebEndpointManagementContextConfiguration {
 			JerseyHealthEndpointAdditionalPathResourceFactory resourceFactory = new JerseyHealthEndpointAdditionalPathResourceFactory(
 					WebServerNamespace.MANAGEMENT, this.groups);
 			Collection<Resource> endpointResources = resourceFactory
-				.createEndpointResources(mapping, Collections.singletonList(this.endpoint), null, null, false)
+				.createEndpointResources(mapping, Collections.singletonList(this.endpoint))
 				.stream()
 				.filter(Objects::nonNull)
 				.toList();

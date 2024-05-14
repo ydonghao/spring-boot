@@ -92,11 +92,19 @@ class NativeImagePluginActionIntegrationTests {
 	void bootBuildImageIsConfiguredToBuildANativeImage() {
 		writeDummySpringApplicationAotProcessorMainClass();
 		BuildResult result = this.gradleBuild.build("bootBuildImageConfiguration");
-		assertThat(result.getOutput()).contains("paketobuildpacks/builder:tiny").contains("BP_NATIVE_IMAGE = true");
+		assertThat(result.getOutput()).contains("paketobuildpacks/builder-jammy-tiny")
+			.contains("BP_NATIVE_IMAGE = true");
 	}
 
 	@TestTemplate
 	void developmentOnlyDependenciesDoNotAppearInNativeImageClasspath() {
+		writeDummySpringApplicationAotProcessorMainClass();
+		BuildResult result = this.gradleBuild.build("checkNativeImageClasspath");
+		assertThat(result.getOutput()).doesNotContain("commons-lang");
+	}
+
+	@TestTemplate
+	void testAndDevelopmentOnlyDependenciesDoNotAppearInNativeImageClasspath() {
 		writeDummySpringApplicationAotProcessorMainClass();
 		BuildResult result = this.gradleBuild.build("checkNativeImageClasspath");
 		assertThat(result.getOutput()).doesNotContain("commons-lang");

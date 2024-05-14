@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2023 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,6 +21,7 @@ import java.net.URI;
 import java.security.KeyManagementException;
 import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
+import java.security.cert.X509Certificate;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.HashSet;
@@ -40,11 +41,11 @@ import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManagerBuil
 import org.apache.hc.client5.http.protocol.HttpClientContext;
 import org.apache.hc.client5.http.ssl.SSLConnectionSocketFactory;
 import org.apache.hc.client5.http.ssl.SSLConnectionSocketFactoryBuilder;
-import org.apache.hc.client5.http.ssl.TrustSelfSignedStrategy;
 import org.apache.hc.core5.http.io.SocketConfig;
 import org.apache.hc.core5.http.protocol.HttpContext;
 import org.apache.hc.core5.http.ssl.TLS;
 import org.apache.hc.core5.ssl.SSLContextBuilder;
+import org.apache.hc.core5.ssl.TrustStrategy;
 
 import org.springframework.boot.web.client.ClientHttpRequestFactorySettings;
 import org.springframework.boot.web.client.RestTemplateBuilder;
@@ -171,8 +172,8 @@ public class TestRestTemplate {
 	}
 
 	/**
-	 * Returns the root URI applied by a {@link RootUriTemplateHandler} or {@code ""} if
-	 * the root URI is not available.
+	 * Returns the root URI applied by {@link RestTemplateBuilder#rootUri(String)} or
+	 * {@code ""} if the root URI has not been applied.
 	 * @return the root URI
 	 */
 	public String getRootUri() {
@@ -956,7 +957,7 @@ public class TestRestTemplate {
 	private URI applyRootUriIfNecessary(URI uri) {
 		UriTemplateHandler uriTemplateHandler = this.restTemplate.getUriTemplateHandler();
 		if ((uriTemplateHandler instanceof RootUriTemplateHandler rootHandler) && uri.toString().startsWith("/")) {
-			return URI.create(rootHandler.getRootUri() + uri.toString());
+			return URI.create(rootHandler.getRootUri() + uri);
 		}
 		return uri;
 	}
@@ -993,7 +994,7 @@ public class TestRestTemplate {
 		ENABLE_REDIRECTS,
 
 		/**
-		 * Use a {@link SSLConnectionSocketFactory} with {@link TrustSelfSignedStrategy}.
+		 * Use a {@link SSLConnectionSocketFactory} that trusts self-signed certificates.
 		 */
 		SSL
 
@@ -1020,9 +1021,6 @@ public class TestRestTemplate {
 			}
 			if (settings.connectTimeout() != null) {
 				setConnectTimeout((int) settings.connectTimeout().toMillis());
-			}
-			if (settings.bufferRequestBody() != null) {
-				setBufferRequestBody(settings.bufferRequestBody());
 			}
 		}
 
@@ -1080,10 +1078,19 @@ public class TestRestTemplate {
 
 	}
 
-	private static class NoOpResponseErrorHandler extends DefaultResponseErrorHandler {
+	private static final class NoOpResponseErrorHandler extends DefaultResponseErrorHandler {
 
 		@Override
 		public void handleError(ClientHttpResponse response) throws IOException {
+		}
+
+	}
+
+	private static final class TrustSelfSignedStrategy implements TrustStrategy {
+
+		@Override
+		public boolean isTrusted(X509Certificate[] chain, String authType) {
+			return chain.length == 1;
 		}
 
 	}

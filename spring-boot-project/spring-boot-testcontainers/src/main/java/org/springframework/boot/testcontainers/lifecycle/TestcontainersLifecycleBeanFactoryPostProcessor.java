@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2023 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -29,7 +29,7 @@ import org.springframework.core.annotation.Order;
 
 /**
  * {@link BeanFactoryPostProcessor} to prevent {@link AutoCloseable} destruction calls so
- * that {@link TestcontainersLifecycleBeanFactoryPostProcessor} can be smarter about which
+ * that {@link TestcontainersLifecycleBeanPostProcessor} can be smarter about which
  * containers to close.
  *
  * @author Phillip Webb
@@ -50,6 +50,7 @@ class TestcontainersLifecycleBeanFactoryPostProcessor implements BeanFactoryPost
 				}
 			}
 			catch (NoSuchBeanDefinitionException ex) {
+				// Ignore
 			}
 		}
 	}

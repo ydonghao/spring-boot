@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2023 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -36,7 +36,7 @@ import org.springframework.context.ConfigurableApplicationContext;
 public class TestcontainersLifecycleApplicationContextInitializer
 		implements ApplicationContextInitializer<ConfigurableApplicationContext> {
 
-	private static Set<ConfigurableApplicationContext> applied = Collections.newSetFromMap(new WeakHashMap<>());
+	private static final Set<ConfigurableApplicationContext> applied = Collections.newSetFromMap(new WeakHashMap<>());
 
 	@Override
 	public void initialize(ConfigurableApplicationContext applicationContext) {
@@ -47,7 +47,11 @@ public class TestcontainersLifecycleApplicationContextInitializer
 		}
 		ConfigurableListableBeanFactory beanFactory = applicationContext.getBeanFactory();
 		applicationContext.addBeanFactoryPostProcessor(new TestcontainersLifecycleBeanFactoryPostProcessor());
-		beanFactory.addBeanPostProcessor(new TestcontainersLifecycleBeanPostProcessor(beanFactory));
+		TestcontainersStartup startup = TestcontainersStartup.get(applicationContext.getEnvironment());
+		TestcontainersLifecycleBeanPostProcessor beanPostProcessor = new TestcontainersLifecycleBeanPostProcessor(
+				beanFactory, startup);
+		beanFactory.addBeanPostProcessor(beanPostProcessor);
+		applicationContext.addApplicationListener(beanPostProcessor);
 	}
 
 }

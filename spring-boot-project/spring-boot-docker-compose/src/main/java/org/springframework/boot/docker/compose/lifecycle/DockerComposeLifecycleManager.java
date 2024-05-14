@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2023 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,6 +24,7 @@ import java.util.Set;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 
+import org.springframework.aot.AotDetector;
 import org.springframework.boot.SpringApplicationShutdownHandlers;
 import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.boot.docker.compose.core.DockerCompose;
@@ -31,6 +32,7 @@ import org.springframework.boot.docker.compose.core.DockerComposeFile;
 import org.springframework.boot.docker.compose.core.RunningService;
 import org.springframework.boot.docker.compose.lifecycle.DockerComposeProperties.Readiness.Wait;
 import org.springframework.boot.docker.compose.lifecycle.DockerComposeProperties.Start;
+import org.springframework.boot.docker.compose.lifecycle.DockerComposeProperties.Start.Skip;
 import org.springframework.boot.docker.compose.lifecycle.DockerComposeProperties.Stop;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationListener;
@@ -92,6 +94,10 @@ class DockerComposeLifecycleManager {
 	}
 
 	void start() {
+		if (Boolean.getBoolean("spring.aot.processing") || AotDetector.useGeneratedArtifacts()) {
+			logger.trace("Docker Compose support disabled with AOT and native images");
+			return;
+		}
 		if (!this.properties.isEnabled()) {
 			logger.trace("Docker Compose support not enabled");
 			return;
@@ -113,12 +119,20 @@ class DockerComposeLifecycleManager {
 		Stop stop = this.properties.getStop();
 		Wait wait = this.properties.getReadiness().getWait();
 		List<RunningService> runningServices = dockerCompose.getRunningServices();
-		if (lifecycleManagement.shouldStart() && runningServices.isEmpty()) {
-			start.getCommand().applyTo(dockerCompose, start.getLogLevel());
-			runningServices = dockerCompose.getRunningServices();
-			wait = (wait != Wait.ONLY_IF_STARTED) ? wait : Wait.ALWAYS;
-			if (lifecycleManagement.shouldStop()) {
-				this.shutdownHandlers.add(() -> stop.getCommand().applyTo(dockerCompose, stop.getTimeout()));
+		if (lifecycleManagement.shouldStart()) {
+			Skip skip = this.properties.getStart().getSkip();
+			if (skip.shouldSkip(runningServices)) {
+				logger.info(skip.getLogMessage());
+			}
+			else {
+				start.getCommand().applyTo(dockerCompose, start.getLogLevel());
+				runningServices = dockerCompose.getRunningServices();
+				if (wait == Wait.ONLY_IF_STARTED) {
+					wait = Wait.ALWAYS;
+				}
+				if (lifecycleManagement.shouldStop()) {
+					this.shutdownHandlers.add(() -> stop.getCommand().applyTo(dockerCompose, stop.getTimeout()));
+				}
 			}
 		}
 		List<RunningService> relevantServices = new ArrayList<>(runningServices);

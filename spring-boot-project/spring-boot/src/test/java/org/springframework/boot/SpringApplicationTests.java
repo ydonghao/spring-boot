@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2023 the original author or authors.
+ * Copyright 2012-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@
 
 package org.springframework.boot;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -24,12 +25,14 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 
 import jakarta.annotation.PostConstruct;
 import org.assertj.core.api.Condition;
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -59,6 +62,7 @@ import org.springframework.boot.availability.AvailabilityChangeEvent;
 import org.springframework.boot.availability.AvailabilityState;
 import org.springframework.boot.availability.LivenessState;
 import org.springframework.boot.availability.ReadinessState;
+import org.springframework.boot.builder.ParentContextApplicationContextInitializer;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.boot.context.event.ApplicationContextInitializedEvent;
 import org.springframework.boot.context.event.ApplicationEnvironmentPreparedEvent;
@@ -69,6 +73,7 @@ import org.springframework.boot.context.event.ApplicationStartedEvent;
 import org.springframework.boot.context.event.ApplicationStartingEvent;
 import org.springframework.boot.context.event.SpringApplicationEvent;
 import org.springframework.boot.convert.ApplicationConversionService;
+import org.springframework.boot.testsupport.classpath.ForkedClassPath;
 import org.springframework.boot.testsupport.system.CapturedOutput;
 import org.springframework.boot.testsupport.system.OutputCaptureExtension;
 import org.springframework.boot.web.embedded.netty.NettyReactiveWebServerFactory;
@@ -96,6 +101,7 @@ import org.springframework.context.event.SmartApplicationListener;
 import org.springframework.context.support.AbstractApplicationContext;
 import org.springframework.context.support.StaticApplicationContext;
 import org.springframework.core.Ordered;
+import org.springframework.core.annotation.Order;
 import org.springframework.core.env.CommandLinePropertySource;
 import org.springframework.core.env.CompositePropertySource;
 import org.springframework.core.env.ConfigurableEnvironment;
@@ -157,6 +163,9 @@ import static org.mockito.Mockito.spy;
  * @author Nguyen Bao Sach
  * @author Chris Bono
  * @author Sebastien Deleuze
+ * @author Moritz Halbritter
+ * @author Tadaya Tsuyukubo
+ * @author Yanming Zhou
  */
 @ExtendWith(OutputCaptureExtension.class)
 class SpringApplicationTests {
@@ -628,6 +637,28 @@ class SpringApplicationTests {
 	}
 
 	@Test
+	void runCommandLineRunnersAndApplicationRunnersWithParentContext() {
+		SpringApplication application = new SpringApplication(CommandLineRunConfig.class);
+		application.setWebApplicationType(WebApplicationType.NONE);
+		application.addInitializers(new ParentContextApplicationContextInitializer(
+				new AnnotationConfigApplicationContext(CommandLineRunParentConfig.class)));
+		this.context = application.run("arg");
+		assertThat(this.context).has(runTestRunnerBean("runnerA"));
+		assertThat(this.context).has(runTestRunnerBean("runnerB"));
+		assertThat(this.context).has(runTestRunnerBean("runnerC"));
+		assertThat(this.context).doesNotHave(runTestRunnerBean("runnerP"));
+	}
+
+	@Test
+	void runCommandLineRunnersAndApplicationRunnersUsingOrderOnBeanDefinitions() {
+		SpringApplication application = new SpringApplication(BeanDefinitionOrderRunnerConfig.class);
+		application.setWebApplicationType(WebApplicationType.NONE);
+		this.context = application.run("arg");
+		BeanDefinitionOrderRunnerConfig config = this.context.getBean(BeanDefinitionOrderRunnerConfig.class);
+		assertThat(config.runners).containsExactly("runnerA", "runnerB", "runnerC");
+	}
+
+	@Test
 	@SuppressWarnings("unchecked")
 	void runnersAreCalledAfterStartedIsLoggedAndBeforeApplicationReadyEventIsPublished(CapturedOutput output)
 			throws Exception {
@@ -721,6 +752,53 @@ class SpringApplicationTests {
 		then(listener).should(never()).onApplicationEvent(isA(ApplicationFailedEvent.class));
 		assertThat(exitCodeListener.getExitCode()).isEqualTo(11);
 		assertThat(output).contains("Application run failed");
+	}
+
+	@Test
+	void failureOnTheJvmLogsApplicationRunFailed(CapturedOutput output) {
+		SpringApplication application = new SpringApplication(ExampleConfig.class);
+		application.setWebApplicationType(WebApplicationType.NONE);
+		ExitCodeListener exitCodeListener = new ExitCodeListener();
+		application.addListeners(exitCodeListener);
+		@SuppressWarnings("unchecked")
+		ApplicationListener<SpringApplicationEvent> listener = mock(ApplicationListener.class);
+		application.addListeners(listener);
+		ExitStatusException failure = new ExitStatusException();
+		willThrow(failure).given(listener).onApplicationEvent(isA(ApplicationReadyEvent.class));
+		assertThatExceptionOfType(RuntimeException.class).isThrownBy(application::run);
+		then(listener).should().onApplicationEvent(isA(ApplicationReadyEvent.class));
+		then(listener).should(never()).onApplicationEvent(isA(ApplicationFailedEvent.class));
+		assertThat(exitCodeListener.getExitCode()).isEqualTo(11);
+		// Leading space only happens when logging
+		assertThat(output).contains(" Application run failed").contains("ExitStatusException");
+	}
+
+	@Test
+	@ForkedClassPath
+	void failureInANativeImageWritesFailureToSystemOut(CapturedOutput output) {
+		System.setProperty("org.graalvm.nativeimage.imagecode", "true");
+		try {
+			SpringApplication application = new SpringApplication(ExampleConfig.class);
+			application.setWebApplicationType(WebApplicationType.NONE);
+			ExitCodeListener exitCodeListener = new ExitCodeListener();
+			application.addListeners(exitCodeListener);
+			@SuppressWarnings("unchecked")
+			ApplicationListener<SpringApplicationEvent> listener = mock(ApplicationListener.class);
+			application.addListeners(listener);
+			ExitStatusException failure = new ExitStatusException();
+			willThrow(failure).given(listener).onApplicationEvent(isA(ApplicationReadyEvent.class));
+			assertThatExceptionOfType(RuntimeException.class).isThrownBy(application::run);
+			then(listener).should().onApplicationEvent(isA(ApplicationReadyEvent.class));
+			then(listener).should(never()).onApplicationEvent(isA(ApplicationFailedEvent.class));
+			assertThat(exitCodeListener.getExitCode()).isEqualTo(11);
+			// Leading space only happens when logging
+			assertThat(output).doesNotContain(" Application run failed")
+				.contains("Application run failed")
+				.contains("ExitStatusException");
+		}
+		finally {
+			System.clearProperty("org.graalvm.nativeimage.imagecode");
+		}
 	}
 
 	@Test
@@ -1361,26 +1439,79 @@ class SpringApplicationTests {
 	}
 
 	@Test
+	void shouldReportFriendlyErrorIfAotInitializerNotFound() {
+		SpringApplication application = new SpringApplication(TestSpringApplication.class);
+		application.setWebApplicationType(WebApplicationType.NONE);
+		application.setMainApplicationClass(TestSpringApplication.class);
+		System.setProperty(AotDetector.AOT_ENABLED, "true");
+		try {
+			assertThatExceptionOfType(AotInitializerNotFoundException.class).isThrownBy(application::run)
+				.withMessageMatching("^.+AOT initializer .+ could not be found$");
+		}
+		finally {
+			System.clearProperty(AotDetector.AOT_ENABLED);
+		}
+	}
+
+	@Test
 	void fromRunsWithAdditionalSources() {
 		assertThat(ExampleAdditionalConfig.local.get()).isNull();
-		SpringApplication.from(ExampleFromMainMethod::main).with(ExampleAdditionalConfig.class).run();
+		this.context = SpringApplication.from(ExampleFromMainMethod::main)
+			.with(ExampleAdditionalConfig.class)
+			.run()
+			.getApplicationContext();
 		assertThat(ExampleAdditionalConfig.local.get()).isNotNull();
 		ExampleAdditionalConfig.local.set(null);
 	}
 
 	@Test
 	void fromReturnsApplicationContext() {
-		ConfigurableApplicationContext context = SpringApplication.from(ExampleFromMainMethod::main)
+		this.context = SpringApplication.from(ExampleFromMainMethod::main)
 			.with(ExampleAdditionalConfig.class)
 			.run()
 			.getApplicationContext();
-		assertThat(context).isNotNull();
+		assertThat(this.context).isNotNull();
+	}
+
+	@Test
+	void fromWithMultipleApplicationsOnlyAppliesAdditionalSourcesOnce() {
+		this.context = SpringApplication.from(MultipleApplicationsMainMethod::main)
+			.with(SingleUseAdditionalConfig.class)
+			.run()
+			.getApplicationContext();
+		assertThatNoException().isThrownBy(() -> this.context.getBean(SingleUseAdditionalConfig.class));
+	}
+
+	@Test
+	void shouldStartDaemonThreadIfKeepAliveIsEnabled() {
+		SpringApplication application = new SpringApplication(ExampleConfig.class);
+		application.setWebApplicationType(WebApplicationType.NONE);
+		this.context = application.run("--spring.main.keep-alive=true");
+		Set<Thread> threads = getCurrentThreads();
+		assertThat(threads).filteredOn((thread) -> thread.getName().equals("keep-alive"))
+			.singleElement()
+			.satisfies((thread) -> assertThat(thread.isDaemon()).isFalse());
+	}
+
+	@Test
+	void shouldStopKeepAliveThreadIfContextIsClosed() {
+		SpringApplication application = new SpringApplication(ExampleConfig.class);
+		application.setWebApplicationType(WebApplicationType.NONE);
+		application.setKeepAlive(true);
+		this.context = application.run();
+		assertThat(getCurrentThreads()).filteredOn((thread) -> thread.getName().equals("keep-alive")).isNotEmpty();
+		this.context.close();
+		Awaitility.await()
+			.atMost(Duration.ofSeconds(30))
+			.untilAsserted(
+					() -> assertThat(getCurrentThreads()).filteredOn((thread) -> thread.getName().equals("keep-alive"))
+						.isEmpty());
 	}
 
 	private <S extends AvailabilityState> ArgumentMatcher<ApplicationEvent> isAvailabilityChangeEventWithState(
 			S state) {
-		return (argument) -> (argument instanceof AvailabilityChangeEvent<?>)
-				&& ((AvailabilityChangeEvent<?>) argument).getState().equals(state);
+		return (argument) -> (argument instanceof AvailabilityChangeEvent<?> availabilityChangeEvent)
+				&& availabilityChangeEvent.getState().equals(state);
 	}
 
 	private <E extends ApplicationEvent> AtomicReference<E> addListener(SpringApplication application,
@@ -1408,7 +1539,7 @@ class SpringApplicationTests {
 		};
 	}
 
-	private Condition<ConfigurableApplicationContext> runTestRunnerBean(final String name) {
+	private Condition<ConfigurableApplicationContext> runTestRunnerBean(String name) {
 		return new Condition<>("run testrunner bean") {
 
 			@Override
@@ -1417,6 +1548,10 @@ class SpringApplicationTests {
 			}
 
 		};
+	}
+
+	private Set<Thread> getCurrentThreads() {
+		return Thread.getAllStackTraces().keySet();
 	}
 
 	static class TestEventListener<E extends ApplicationEvent> implements SmartApplicationListener {
@@ -1618,17 +1753,52 @@ class SpringApplicationTests {
 
 		@Bean
 		TestCommandLineRunner runnerC() {
-			return new TestCommandLineRunner(Ordered.LOWEST_PRECEDENCE, "runnerB", "runnerA");
+			return new TestCommandLineRunner("runnerC", Ordered.LOWEST_PRECEDENCE, "runnerB", "runnerA");
 		}
 
 		@Bean
 		TestApplicationRunner runnerB() {
-			return new TestApplicationRunner(Ordered.LOWEST_PRECEDENCE - 1, "runnerA");
+			return new TestApplicationRunner("runnerB", Ordered.LOWEST_PRECEDENCE - 1, "runnerA");
 		}
 
 		@Bean
 		TestCommandLineRunner runnerA() {
-			return new TestCommandLineRunner(Ordered.HIGHEST_PRECEDENCE);
+			return new TestCommandLineRunner("runnerA", Ordered.HIGHEST_PRECEDENCE);
+		}
+
+	}
+
+	@Configuration(proxyBeanMethods = false)
+	static class CommandLineRunParentConfig {
+
+		@Bean
+		TestCommandLineRunner runnerP() {
+			return new TestCommandLineRunner("runnerP", Ordered.LOWEST_PRECEDENCE);
+		}
+
+	}
+
+	@Configuration(proxyBeanMethods = false)
+	static class BeanDefinitionOrderRunnerConfig {
+
+		private final List<String> runners = new ArrayList<>();
+
+		@Bean
+		@Order
+		CommandLineRunner runnerC() {
+			return (args) -> this.runners.add("runnerC");
+		}
+
+		@Bean
+		@Order(Ordered.LOWEST_PRECEDENCE - 1)
+		ApplicationRunner runnerB() {
+			return (args) -> this.runners.add("runnerB");
+		}
+
+		@Bean
+		@Order(Ordered.HIGHEST_PRECEDENCE)
+		CommandLineRunner runnerA() {
+			return (args) -> this.runners.add("runnerA");
 		}
 
 	}
@@ -1812,12 +1982,16 @@ class SpringApplicationTests {
 
 	static class TestCommandLineRunner extends AbstractTestRunner implements CommandLineRunner {
 
-		TestCommandLineRunner(int order, String... expectedBefore) {
+		private final String name;
+
+		TestCommandLineRunner(String name, int order, String... expectedBefore) {
 			super(order, expectedBefore);
+			this.name = name;
 		}
 
 		@Override
 		public void run(String... args) {
+			System.out.println(">>> " + this.name);
 			markAsRan();
 		}
 
@@ -1825,12 +1999,16 @@ class SpringApplicationTests {
 
 	static class TestApplicationRunner extends AbstractTestRunner implements ApplicationRunner {
 
-		TestApplicationRunner(int order, String... expectedBefore) {
+		private final String name;
+
+		TestApplicationRunner(String name, int order, String... expectedBefore) {
 			super(order, expectedBefore);
+			this.name = name;
 		}
 
 		@Override
 		public void run(ApplicationArguments args) {
+			System.out.println(">>> " + this.name);
 			markAsRan();
 		}
 
@@ -1949,6 +2127,31 @@ class SpringApplicationTests {
 
 	}
 
+	static class MultipleApplicationsMainMethod {
+
+		static void main(String[] args) {
+			SpringApplication application = new SpringApplication(ExampleConfig.class);
+			application.setWebApplicationType(WebApplicationType.NONE);
+			application.addListeners(new ApplicationListener<ApplicationEnvironmentPreparedEvent>() {
+
+				@Override
+				public void onApplicationEvent(ApplicationEnvironmentPreparedEvent event) {
+					SpringApplicationBuilder builder = new SpringApplicationBuilder(
+							InnerApplicationConfiguration.class);
+					builder.web(WebApplicationType.NONE);
+					builder.run().close();
+				}
+
+			});
+			application.run(args);
+		}
+
+		static class InnerApplicationConfiguration {
+
+		}
+
+	}
+
 	@Configuration
 	static class ExampleAdditionalConfig {
 
@@ -1956,6 +2159,19 @@ class SpringApplicationTests {
 
 		ExampleAdditionalConfig() {
 			local.set(this);
+		}
+
+	}
+
+	@Configuration
+	static class SingleUseAdditionalConfig {
+
+		private static AtomicBoolean used = new AtomicBoolean(false);
+
+		SingleUseAdditionalConfig() {
+			if (!used.compareAndSet(false, true)) {
+				throw new IllegalStateException("Single-use configuration has already been used");
+			}
 		}
 
 	}
